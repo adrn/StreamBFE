@@ -23,7 +23,7 @@ from gary.dynamics import mockstream, orbitfit
 
 # Project
 from streambfe import FRAME
-from streambfe.orbitfit import ln_orbitfit_prior, ln_orbitfit_likelihood, _mcmc_sample_to_w0
+from streambfe.orbitfit import ln_orbitfit_prior, ln_orbitfit_likelihood
 
 def ln_potential_prior(potential_params, freeze=None):
     return 0.
@@ -270,6 +270,7 @@ def main(mpi=False, n_walkers=None, n_iterations=None, overwrite=False):
 
     sampler.lnprobfn = None
     sampler.pool = None
+    sampler.args = None
     logger.debug("saving emcee sampler to: {}".format(sampler_path))
     with open(sampler_path, 'wb') as f:
         pickle.dump(sampler, f)
