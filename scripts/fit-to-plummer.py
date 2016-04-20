@@ -4,7 +4,6 @@ from __future__ import division, print_function
 import pickle
 import os
 import sys
-from math import log
 
 # Third-party
 import astropy.coordinates as coord
@@ -27,6 +26,7 @@ from gary.dynamics import mockstream, orbitfit
 # Project
 from streambfe import FRAME
 from streambfe.orbitfit import ln_orbitfit_prior, ln_orbitfit_likelihood, _mcmc_sample_to_w0
+from streambfe.plot import *
 
 # ----------------------------------------------------------------------------
 # NEED TO CHANGE THESE WHEN CHANGING FIT POTENTIAL
@@ -78,93 +78,20 @@ def observe_data(c, v):
 
     return data, err
 
-def plot_stream_obs(stream_c, stream_v):
-    style = dict(ls='none', marker='.', alpha=0.4)
-    fig,axes = pl.subplots(2,3,figsize=(12,8), sharex=True)
-
-    axes[0,0].plot(stream_c.l.degree, stream_c.b.degree, **style)
-    axes[1,0].plot(stream_c.l.degree, stream_c.distance.value, **style)
-
-    axes[0,1].plot(stream_c.l.degree, galactic.decompose(stream_v[0]).value, **style)
-    axes[1,1].plot(stream_c.l.degree, galactic.decompose(stream_v[1]).value, **style)
-
-    axes[0,2].plot(stream_c.l.degree, galactic.decompose(stream_v[2]).value, **style)
-
-    axes[1,1].set_xlabel('$l$ [deg]')
-
-    fig.tight_layout()
-
-    axes[1,2].set_visible(False)
-
-    return fig,axes
-
-def plot_data(data, err, R, fig=None):
-    if fig is None:
-        fig,axes = pl.subplots(2,3,figsize=(12,8), sharex=True)
-    else:
-        axes = np.array(fig.axes).reshape(2,3)
-
-    rep = coord.SphericalRepresentation(lon=data['phi1'], lat=data['phi2'],
-                                        distance=data['distance'])
-    g = coord.Galactic(orbitfit.rotate_sph_coordinate(rep, R.T))
-
-    style = dict(ls='none', marker='.', ecolor='#aaaaaa')
-
-    axes[0,0].errorbar(g.l.degree, g.b.degree, 1E-8*g.b.degree, **style)
-    axes[1,0].errorbar(g.l.degree, g.distance.value, err['distance'].value, **style)
-
-    axes[0,1].errorbar(g.l.degree, galactic.decompose(data['mul']).value,
-                       galactic.decompose(err['mul']).value, **style)
-    axes[1,1].errorbar(g.l.degree, galactic.decompose(data['mub']).value,
-                       galactic.decompose(err['mub']).value, **style)
-
-    axes[0,2].errorbar(g.l.degree, galactic.decompose(data['vr']).value,
-                       galactic.decompose(err['vr']).value, **style)
-
-    axes[1,1].set_xlabel('$l$ [deg]')
-
-    try:
-        fig.tight_layout()
-    except AttributeError: # already called
-        pass
-
-    axes[1,2].set_visible(False)
-
-    return fig,axes
-
-def plot_orbit(orbit, fig=None):
-    orbit_c, orbit_v = orbit.to_frame(coord.Galactic, **FRAME)
-
-    if fig is None:
-        fig,axes = pl.subplots(2,3,figsize=(12,8), sharex=True)
-    else:
-        axes = np.array(fig.axes).reshape(2,3)
-
-    style = dict(ls='-', marker=None, alpha=0.75, color='lightblue')
-
-    axes[0,0].plot(orbit_c.l.degree, orbit_c.b.degree, **style)
-    axes[1,0].plot(orbit_c.l.degree, orbit_c.distance.value, **style)
-
-    axes[0,1].plot(orbit_c.l.degree, galactic.decompose(orbit_v[0]).value, **style)
-    axes[1,1].plot(orbit_c.l.degree, galactic.decompose(orbit_v[1]).value, **style)
-
-    axes[0,2].plot(orbit_c.l.degree, galactic.decompose(orbit_v[2]).value, **style)
-
-    axes[1,1].set_xlabel('$l$ [deg]')
-
-    try:
-        fig.tight_layout()
-    except AttributeError: # already called
-        pass
-
-    axes[1,2].set_visible(False)
-
-    return fig,axes
-
 def main(mpi=False, n_walkers=None, n_iterations=None, overwrite=False):
     np.random.seed(42)
 
     pool = get_pool(mpi=mpi)
+
+    # save sampler to pickle file
+    sampler_path = "plummer_sampler.pickle"
+    data_path = "plummer_data.pickle"
+
+    if os.path.exists(sampler_path) and overwrite:
+        os.remove(sampler_path)
+
+    if os.path.exists(data_path) and overwrite:
+        os.remove(data_path)
 
     # potential to generate stream in
     true_potential = gp.PlummerPotential(m=1E12, b=30, units=galactic)
@@ -206,6 +133,12 @@ def main(mpi=False, n_walkers=None, n_iterations=None, overwrite=False):
     data,err = observe_data(rot_rep, stream_v)
     # _ = plot_data(data, err, R)
     # pl.show()
+
+    # write data out
+    with open(data_path, 'wb') as f:
+        pickle.dump((data,err,R), f)
+
+    return
 
     # for now, freeze potential parameters and just sample over orbit
     freeze = dict()
@@ -280,12 +213,6 @@ def main(mpi=False, n_walkers=None, n_iterations=None, overwrite=False):
     logger.info("finished sampling")
 
     pool.close()
-
-    # same sampler to pickle file
-    sampler_path = "plummer_sampler.pickle"
-
-    if os.path.exists(sampler_path) and overwrite:
-        os.remove(sampler_path)
 
     sampler.lnprobfn = None
     sampler.pool = None
