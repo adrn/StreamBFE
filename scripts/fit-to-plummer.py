@@ -35,7 +35,7 @@ from streambfe.plot import *
 def ln_potential_prior(potential_params, freeze=None):
     lp = 0.
 
-    lp += norm.logpdf(np.log10(potential_params['m']), loc=12., scale=0.25)
+    lp += norm.logpdf(np.log10(potential_params['m']), loc=12., scale=0.01)
     # lp += norm.logpdf(potential_params['b'], loc=30., scale=10.)
 
     b = potential_params['b']
