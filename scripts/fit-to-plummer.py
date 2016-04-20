@@ -4,7 +4,7 @@ from __future__ import division, print_function
 import pickle
 import os
 import sys
-from collections import OrderedDict as odict
+from math import log
 
 # Third-party
 import astropy.coordinates as coord
@@ -24,28 +24,27 @@ from gary.dynamics import mockstream, orbitfit
 
 # Project
 from streambfe import FRAME
-from streambfe.orbitfit import ln_orbitfit_prior, ln_orbitfit_likelihood
+from streambfe.orbitfit import ln_orbitfit_prior, ln_orbitfit_likelihood, _mcmc_sample_to_w0
 
 # ----------------------------------------------------------------------------
 # NEED TO CHANGE THESE WHEN CHANGING FIT POTENTIAL
 #
-def mcmc_to_potential_param(params):
-    """ We may want to sample in a transform of the potential parameters, e.g., log(m) """
-    potential_params = odict()
-    potential_params['m'] = 10**params['m']
-    potential_params['b'] = 10**params['b']
-    return potential_params
+def log10_prior(x, a, b):
+    A = log(10) / (b*(log(b) - 1) - a*(log(a) - 1))
+    return A*np.log10(x)
 
 def ln_potential_prior(potential_params, freeze=None):
     lp = 0.
 
-    logm = np.log10(potential_params['m'])
-    if logm < 11 or logm > 13:
-        return -np.inf
+    # logm = np.log10(potential_params['m'])
+    # if logm < 11 or logm > 13:
+    #     return -np.inf
+    lp += np.log(log10_prior(potential_params['m'], 1E11, 1E13))
 
-    logb = np.log10(potential_params['b'])
-    if logb < 0 or logb > 2:
-        return -np.inf
+    # logb = np.log10(potential_params['b'])
+    # if logb < 0 or logb > 2:
+    #     return -np.inf
+    lp += np.log(log10_prior(potential_params['b'], 1., 100.))
 
     return lp
 #
@@ -252,7 +251,7 @@ def main(mpi=False, n_walkers=None, n_iterations=None, overwrite=False):
 
     # first, optimize to get a good guess to initialize MCMC
     args = (data, err, R, fit_potential.__class__, potential_param_names, ln_potential_prior,
-            mcmc_to_potential_param, dt, n_steps, freeze)
+            dt, n_steps, freeze)
 
     logger.info("optimizing ln_posterior...")
     res = so.minimize(lambda *args,**kwargs: -ln_posterior(*args, **kwargs),
@@ -267,6 +266,7 @@ def main(mpi=False, n_walkers=None, n_iterations=None, overwrite=False):
     # fig,axes = plot_data(data, err, R)
     # _ = plot_orbit(orbit, fig=fig)
     # pl.show()
+    # return
 
     # now, create initial conditions for MCMC walkers in a small ball around the
     #   optimized parameter vector

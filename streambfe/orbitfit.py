@@ -64,12 +64,10 @@ def _unpack(p, potential_param_names, mcmc_to_potential_param, freeze=None):
         else:
             potential_params[name] = freeze[_name]
 
-    potential_params = mcmc_to_potential_param(potential_params)
-
     return (phi2,d,mul,mub,vr,phi2_sigma,d_sigma,vr_sigma,potential_params)
 
 def ln_orbitfit_prior(p, data, err, R, Potential, potential_param_names, ln_potential_prior,
-                      mcmc_to_potential_param, dt, n_steps, freeze=None):
+                      dt, n_steps, freeze=None):
     """
     Evaluate the prior over stream orbit fit parameters.
     See docstring for `ln_likelihood()` for information on args and kwargs.
@@ -79,8 +77,7 @@ def ln_orbitfit_prior(p, data, err, R, Potential, potential_param_names, ln_pote
     lp = 0.
 
     # unpack the parameters and the frozen parameters
-    phi2,d,mul,mub,vr,phi2_sigma,d_sigma,vr_sigma,potential_params = _unpack(p, potential_param_names,
-                                                                             mcmc_to_potential_param, freeze)
+    phi2,d,mul,mub,vr,phi2_sigma,d_sigma,vr_sigma,potential_params = _unpack(p, potential_param_names, freeze)
 
     # prior on instrinsic width of stream
     if 'phi2_sigma' not in freeze:
@@ -127,13 +124,12 @@ def _mcmc_sample_to_w0(p, R):
     return w0
 
 def ln_orbitfit_likelihood(p, data, err, R, Potential, potential_param_names, ln_potential_prior,
-                           mcmc_to_potential_param, dt, n_steps, freeze=None):
+                           dt, n_steps, freeze=None):
     """ Evaluate the stream orbit fit likelihood. """
     chi2 = 0.
 
     # unpack the parameters and the frozen parameters
-    phi2,d,mul,mub,vr,phi2_sigma,d_sigma,vr_sigma,potential_params = _unpack(p, potential_param_names,
-                                                                             mcmc_to_potential_param, freeze)
+    phi2,d,mul,mub,vr,phi2_sigma,d_sigma,vr_sigma,potential_params = _unpack(p, potential_param_names, freeze)
 
     w0 = _mcmc_sample_to_w0([phi2,d,mul,mub,vr], R)[:,0]
 
