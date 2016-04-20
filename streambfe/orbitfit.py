@@ -23,12 +23,6 @@ from gary.util import atleast_2d
 # Project
 from .galcen_frame import FRAME
 
-def mcmc_to_potential_param(params):
-    potential_params = odict()
-    potential_params['m'] = 10**params['m']
-    potential_params['b'] = 10**params['b']
-    return potential_params
-
 def _unpack(p, potential_param_names, freeze=None):
     """ Unpack a parameter vector """
 
@@ -69,8 +63,6 @@ def _unpack(p, potential_param_names, freeze=None):
             count_ix += 1
         else:
             potential_params[name] = freeze[_name]
-
-    potential_params = mcmc_to_potential_param(potential_params)
 
     return (phi2,d,mul,mub,vr,phi2_sigma,d_sigma,vr_sigma,potential_params)
 

@@ -13,7 +13,9 @@ import astropy.units as u
 import matplotlib.pyplot as pl
 import numpy as np
 import scipy.optimize as so
+from scipy.stats import norm
 import emcee
+
 from gary.util import get_pool
 from gary.units import galactic
 
@@ -33,12 +35,11 @@ from streambfe.orbitfit import ln_orbitfit_prior, ln_orbitfit_likelihood, _mcmc_
 def ln_potential_prior(potential_params, freeze=None):
     lp = 0.
 
-    logm = np.log10(potential_params['m'])
-    if logm < 11 or logm > 13:
-        return -np.inf
+    lp += norm.logpdf(np.log10(potential_params['m']), loc=12., scale=0.25)
+    # lp += norm.logpdf(potential_params['b'], loc=30., scale=10.)
 
-    logb = np.log10(potential_params['b'])
-    if logb < 0 or logb > 2:
+    b = potential_params['b']
+    if b < 1 or b > 100:
         return -np.inf
 
     return lp
@@ -224,7 +225,7 @@ def main(mpi=False, n_walkers=None, n_iterations=None, overwrite=False):
         _name = "potential_{}".format(k)
         if _name in freeze: continue
         logger.debug("varying potential:{}".format(k))
-        pot_guess += [np.log10(true_potential.parameters[k].value)] # HACK
+        pot_guess += [true_potential.parameters[k].value] # HACK
 
     idx = data['phi1'].argmin()
     p0_guess = [data['phi2'].radian[idx],
