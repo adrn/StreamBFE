@@ -47,6 +47,13 @@ def _unpack(p, potential_param_names, freeze=None):
     else:
         d_sigma = freeze['d_sigma']
 
+    # prior on instrinsic proper motion dispersion
+    if 'mu_sigma' not in freeze:
+        mu_sigma = p[count_ix]
+        count_ix += 1
+    else:
+        mu_sigma = freeze['mu_sigma']
+
     # prior on instrinsic LOS velocity dispersion of stream
     if 'vr_sigma' not in freeze:
         vr_sigma = p[count_ix]
@@ -64,7 +71,7 @@ def _unpack(p, potential_param_names, freeze=None):
         else:
             potential_params[name] = freeze[_name]
 
-    return (phi2,d,mul,mub,vr,phi2_sigma,d_sigma,vr_sigma,potential_params)
+    return (phi2,d,mul,mub,vr,phi2_sigma,d_sigma,mu_sigma,vr_sigma,potential_params)
 
 def ln_orbitfit_prior(p, data, err, R, Potential, potential_param_names, ln_potential_prior,
                       dt, n_steps, freeze=None):
@@ -77,7 +84,8 @@ def ln_orbitfit_prior(p, data, err, R, Potential, potential_param_names, ln_pote
     lp = 0.
 
     # unpack the parameters and the frozen parameters
-    phi2,d,mul,mub,vr,phi2_sigma,d_sigma,vr_sigma,potential_params = _unpack(p, potential_param_names, freeze)
+    pp = _unpack(p, potential_param_names, freeze)
+    phi2,d,mul,mub,vr,phi2_sigma,d_sigma,mu_sigma,vr_sigma,potential_params = pp
 
     # prior on instrinsic width of stream
     if 'phi2_sigma' not in freeze:
@@ -90,6 +98,12 @@ def ln_orbitfit_prior(p, data, err, R, Potential, potential_param_names, ln_pote
         if d_sigma <= 0.:
             return -np.inf
         lp += -np.log(d_sigma)
+
+    # prior on instrinsic proper motion dispersion
+    if 'mu_sigma' not in freeze:
+        if mu_sigma <= 0.:
+            return -np.inf
+        lp += -np.log(mu_sigma)
 
     # prior on instrinsic LOS velocity dispersion of stream
     if 'vr_sigma' not in freeze:
@@ -129,7 +143,8 @@ def ln_orbitfit_likelihood(p, data, err, R, Potential, potential_param_names, ln
     chi2 = 0.
 
     # unpack the parameters and the frozen parameters
-    phi2,d,mul,mub,vr,phi2_sigma,d_sigma,vr_sigma,potential_params = _unpack(p, potential_param_names, freeze)
+    pp = _unpack(p, potential_param_names, freeze)
+    phi2,d,mul,mub,vr,phi2_sigma,d_sigma,mu_sigma,vr_sigma,potential_params = pp
 
     w0 = _mcmc_sample_to_w0([phi2,d,mul,mub,vr], R)[:,0]
 
@@ -179,10 +194,10 @@ def ln_orbitfit_likelihood(p, data, err, R, Potential, potential_param_names, ln
     chi2 += -(d_interp(data_x) - dist)**2 / (_err**2 + d_sigma**2) - np.log(_err**2 + d_sigma**2)
 
     _err = err['mul'].decompose(galactic).value
-    chi2 += -(mul_interp(data_x) - mul)**2 / (_err**2) - 2*np.log(_err)
+    chi2 += -(mul_interp(data_x) - mul)**2 / (_err**2 + mu_sigma**2) - np.log(_err**2 + mu_sigma**2)
 
     _err = err['mub'].decompose(galactic).value
-    chi2 += -(mub_interp(data_x) - mub)**2 / (_err**2) - 2*np.log(_err)
+    chi2 += -(mub_interp(data_x) - mub)**2 / (_err**2 + mu_sigma**2) - np.log(_err**2 + mu_sigma**2)
 
     _err = err['vr'].decompose(galactic).value
     chi2 += -(vr_interp(data_x) - vr)**2 / (_err**2 + vr_sigma**2) - np.log(_err**2 + vr_sigma**2)

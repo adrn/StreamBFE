@@ -58,16 +58,14 @@ def ln_posterior(p, *args, **kwargs):
     return lp + ll.sum()
 
 def observe_data(c, v):
-    frac_distance_err = 5.
-
     n_data = len(c)
     data = dict()
     err = dict()
 
-    err['distance'] = frac_distance_err/100. * c.distance
-    err['mul'] = 0.1*u.mas/u.yr
-    err['mub'] = 0.1*u.mas/u.yr
-    err['vr'] = 2.*u.km/u.s
+    err['distance'] = 1E-3/100. * c.distance
+    err['mul'] = 1E-5*u.mas/u.yr
+    err['mub'] = 1E-5*u.mas/u.yr
+    err['vr'] = 1E-3*u.km/u.s
 
     data['phi1'] = c.lon
     data['phi2'] = c.lat
@@ -137,8 +135,6 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
     # write data out
     with open(data_path, 'wb') as f:
         pickle.dump((data,err,R), f)
-
-    return
 
     # for now, freeze potential parameters and just sample over orbit
     freeze = dict()
