@@ -143,6 +143,7 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
     freeze['phi2_sigma'] = np.radians(0.25)
     freeze['d_sigma'] = 0.35
     freeze['vr_sigma'] = (1.5*u.km/u.s).decompose(galactic).value
+    freeze['mu_sigma'] = (0.01*u.mas/u.yr).decompose(galactic).value
 
     potential_param_names = list(fit_potential.parameters.keys())
     # for k in potential_param_names:
