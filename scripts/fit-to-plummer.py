@@ -58,7 +58,7 @@ def ln_posterior(p, *args, **kwargs):
     return lp + ll.sum()
 
 def observe_data(c, v):
-    frac_distance_err = 2.
+    frac_distance_err = 5.
 
     n_data = len(c)
     data = dict()
@@ -67,7 +67,7 @@ def observe_data(c, v):
     err['distance'] = frac_distance_err/100. * c.distance
     err['mul'] = 0.1*u.mas/u.yr
     err['mub'] = 0.1*u.mas/u.yr
-    err['vr'] = 1.*u.km/u.s
+    err['vr'] = 2.*u.km/u.s
 
     data['phi1'] = c.lon
     data['phi2'] = c.lat
