@@ -4,6 +4,7 @@ from __future__ import division, print_function
 import pickle
 import os
 import sys
+from collections import OrderedDict as odict
 
 # Third-party
 import astropy.coordinates as coord
@@ -25,8 +26,30 @@ from gary.dynamics import mockstream, orbitfit
 from streambfe import FRAME
 from streambfe.orbitfit import ln_orbitfit_prior, ln_orbitfit_likelihood
 
+# ----------------------------------------------------------------------------
+# NEED TO CHANGE THESE WHEN CHANGING FIT POTENTIAL
+#
+def mcmc_to_potential_param(params):
+    """ We may want to sample in a transform of the potential parameters, e.g., log(m) """
+    potential_params = odict()
+    potential_params['m'] = 10**params['m']
+    potential_params['b'] = 10**params['b']
+    return potential_params
+
 def ln_potential_prior(potential_params, freeze=None):
-    return 0.
+    lp = 0.
+
+    logm = np.log10(potential_params['m'])
+    if logm < 11 or logm > 13:
+        return -np.inf
+
+    logb = np.log10(potential_params['b'])
+    if logb < 0 or logb > 2:
+        return -np.inf
+
+    return lp
+#
+# ----------------------------------------------------------------------------
 
 def ln_posterior(p, *args, **kwargs):
     lp = ln_orbitfit_prior(p, *args, **kwargs)
@@ -197,17 +220,17 @@ def main(mpi=False, n_walkers=None, n_iterations=None, overwrite=False):
     freeze['d_sigma'] = 0.35
     freeze['vr_sigma'] = (1.5*u.km/u.s).decompose(galactic).value
 
-    # HACK:
     potential_param_names = list(fit_potential.parameters.keys())
-    for k in potential_param_names:
-        logger.debug("freezing potential:{}".format(k))
-        freeze['potential_{}'.format(k)] = fit_potential.parameters[k].value
+    # for k in potential_param_names:
+    #     logger.debug("freezing potential:{}".format(k))
+    #     freeze['potential_{}'.format(k)] = fit_potential.parameters[k].value
 
     pot_guess = []
-    # for k in potential.parameters.keys():
-    #     if k in potential_freeze_params: continue
-    #     logger.debug("varying potential:{}".format(k))
-    #     pot_guess += [potential.parameters[k].value]
+    for k in potential_param_names:
+        _name = "potential_{}".format(k)
+        if _name in freeze: continue
+        logger.debug("varying potential:{}".format(k))
+        pot_guess += [true_potential.parameters[k].value]
 
     idx = data['phi1'].argmin()
     p0_guess = [data['phi2'].radian[idx],
@@ -229,7 +252,7 @@ def main(mpi=False, n_walkers=None, n_iterations=None, overwrite=False):
 
     # first, optimize to get a good guess to initialize MCMC
     args = (data, err, R, fit_potential.__class__, potential_param_names, ln_potential_prior,
-            dt, n_steps, freeze)
+            mcmc_to_potential_param, dt, n_steps, freeze)
 
     logger.info("optimizing ln_posterior...")
     res = so.minimize(lambda *args,**kwargs: -ln_posterior(*args, **kwargs),
