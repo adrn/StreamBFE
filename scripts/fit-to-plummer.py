@@ -198,7 +198,7 @@ def main(mpi=False, n_walkers=None, n_iterations=None, overwrite=False):
     freeze['vr_sigma'] = (1.5*u.km/u.s).decompose(galactic).value
 
     # HACK:
-    potential_param_names = fit_potential.parameters.keys()
+    potential_param_names = list(fit_potential.parameters.keys())
     for k in potential_param_names:
         logger.debug("freezing potential:{}".format(k))
         freeze['potential_{}'.format(k)] = fit_potential.parameters[k].value
@@ -264,8 +264,6 @@ def main(mpi=False, n_walkers=None, n_iterations=None, overwrite=False):
 
     # same sampler to pickle file
     sampler_path = "plummer_sampler.pickle"
-    if not os.path.exists("results"):
-        os.mkdir("results")
 
     if os.path.exists(sampler_path) and overwrite:
         os.remove(sampler_path)
