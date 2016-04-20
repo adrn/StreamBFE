@@ -29,22 +29,17 @@ from streambfe.orbitfit import ln_orbitfit_prior, ln_orbitfit_likelihood, _mcmc_
 # ----------------------------------------------------------------------------
 # NEED TO CHANGE THESE WHEN CHANGING FIT POTENTIAL
 #
-def log10_prior(x, a, b):
-    A = log(10) / (b*(log(b) - 1) - a*(log(a) - 1))
-    return A*np.log10(x)
 
 def ln_potential_prior(potential_params, freeze=None):
     lp = 0.
 
-    # logm = np.log10(potential_params['m'])
-    # if logm < 11 or logm > 13:
-    #     return -np.inf
-    lp += np.log(log10_prior(potential_params['m'], 1E11, 1E13))
+    logm = np.log10(potential_params['m'])
+    if logm < 11 or logm > 13:
+        return -np.inf
 
-    # logb = np.log10(potential_params['b'])
-    # if logb < 0 or logb > 2:
-    #     return -np.inf
-    lp += np.log(log10_prior(potential_params['b'], 1., 100.))
+    logb = np.log10(potential_params['b'])
+    if logb < 0 or logb > 2:
+        return -np.inf
 
     return lp
 #
@@ -229,7 +224,7 @@ def main(mpi=False, n_walkers=None, n_iterations=None, overwrite=False):
         _name = "potential_{}".format(k)
         if _name in freeze: continue
         logger.debug("varying potential:{}".format(k))
-        pot_guess += [true_potential.parameters[k].value]
+        pot_guess += [np.log10(true_potential.parameters[k].value)] # HACK
 
     idx = data['phi1'].argmin()
     p0_guess = [data['phi2'].radian[idx],
