@@ -225,7 +225,8 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
         pool.close()
         raise ValueError("Failed to optimize!")
 
-    # orbit = true_potential.integrate_orbit(_mcmc_sample_to_w0(res.x, R), dt=dt, nsteps=n_steps)
+    # fit_potential = fit_potential.__class__(m=res.x[-2], b=res.x[-1], units=galactic)
+    # orbit = fit_potential.integrate_orbit(_mcmc_sample_to_w0(res.x, R), dt=dt, nsteps=n_steps)
     # fig,axes = plot_data(data, err, R)
     # _ = plot_orbit(orbit, fig=fig)
     # pl.show()
