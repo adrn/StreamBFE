@@ -6,6 +6,7 @@ import os
 import sys
 
 # Third-party
+from astropy.constants import G
 import astropy.coordinates as coord
 from astropy import log as logger
 import astropy.units as u
@@ -32,15 +33,17 @@ from streambfe.plot import *
 # NEED TO CHANGE THESE WHEN CHANGING FIT POTENTIAL
 #
 
-def ln_potential_prior(potential_params, freeze=None):
+def ln_potential_prior(potential_params, freeze=dict()):
     lp = 0.
 
-    lp += norm.logpdf(np.log10(potential_params['m']), loc=12., scale=0.01)
-    # lp += norm.logpdf(potential_params['b'], loc=30., scale=10.)
+    if 'potential_m' not in freeze:
+        lp += norm.logpdf(np.log10(potential_params['m']), loc=12., scale=0.25)
+        # lp += norm.logpdf(potential_params['b'], loc=30., scale=10.)
 
-    b = potential_params['b']
-    if b < 1 or b > 100:
-        return -np.inf
+    if 'potential_b' not in freeze:
+        b = potential_params['b']
+        if b < 1 or b > 100:
+            return -np.inf
 
     return lp
 #
@@ -98,28 +101,56 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
     # integrate some orbit and generate mock stream
     w0 = gd.CartesianPhaseSpacePosition(pos=[0.,22,10]*u.kpc,
                                         vel=[-190,-25,-10]*u.km/u.s)
-    prog_orbit = true_potential.integrate_orbit(w0, dt=1., nsteps=5800)
-    logger.debug("peri,apo: {}, {}".format(prog_orbit.pericenter(), prog_orbit.apocenter()))
 
-    stream = mockstream.fardal_stream(true_potential, prog_orbit=prog_orbit,
-                                      prog_mass=1E5*u.Msun, release_every=1,
-                                      Integrator=gi.DOPRI853Integrator)
+    m = 1E5*u.Msun
+    rtide = (m/true_potential.mass_enclosed(w0.pos))**(1/3.) * np.sqrt(np.sum(w0.pos**2))
+    vdisp = np.sqrt(G*m/(2*rtide)).to(u.km/u.s)
+    logger.debug("rtide, vdisp: {}, {}".format(rtide, vdisp))
 
-    # only take leading tail for orbit fitting
-    leading = stream[1::2]
+    # ------------------------------------------------------------------------
+    #   Option 1
+    # To generate streams with Fardal's method:
+    # prog_orbit = true_potential.integrate_orbit(w0, dt=1., nsteps=5800)
+    # logger.debug("peri,apo: {}, {}".format(prog_orbit.pericenter(), prog_orbit.apocenter()))
 
-    # downsample
-    idx = np.random.permutation(leading.pos.shape[1])[:128]
-    leading = leading[idx]
+    # stream = mockstream.fardal_stream(true_potential, prog_orbit=prog_orbit,
+    #                                   prog_mass=m, release_every=1,
+    #                                   Integrator=gi.DOPRI853Integrator)
 
-    prog_c,prog_v = prog_orbit.to_frame(coord.Galactic, **FRAME)
-    stream_c,stream_v = leading.to_frame(coord.Galactic, **FRAME)
+    # # only take leading tail for orbit fitting
+    # leading = stream[1::2]
+
+    # # downsample
+    # idx = np.random.permutation(leading.pos.shape[1])[:128]
+    # leading = leading[idx]
+    # stream_c,stream_v = leading.to_frame(coord.Galactic, **FRAME)
 
     # fig = leading.plot()
     # prog_orbit[-1000:].plot(axes=fig.axes, alpha=1., color='lightblue')
     # pl.show()
+    # ------------------------------------------------------------------------
 
-    R = orbitfit.compute_stream_rotation_matrix(stream_c, align_lon='max')
+    # ------------------------------------------------------------------------
+    #   Option 2
+    # To generate test particle balls of orbits:
+    mean_w0 = gd.CartesianPhaseSpacePosition(pos=[0.,22,10]*u.kpc,
+                                             vel=[-190,-25,-10]*u.km/u.s)
+
+    std = gd.CartesianPhaseSpacePosition(pos=[rtide.value]*3*u.kpc,
+                                         vel=[vdisp.value]*3*u.km/u.s)
+
+    ball_w = mean_w0.w(galactic)[:,0]
+    ball_std = std.w(galactic)[:,0]
+    ball_w0 = emcee.utils.sample_ball(ball_w, ball_std, size=128)
+    w0 = gd.CartesianPhaseSpacePosition.from_w(ball_w0.T, units=galactic)
+
+    mean_orbit = true_potential.integrate_orbit(mean_w0, dt=1., nsteps=6000)
+    stream_orbits = true_potential.integrate_orbit(w0, dt=1., nsteps=5800)
+    stream = stream_orbits[-1]
+    stream_c,stream_v = stream.to_frame(coord.Galactic, **FRAME)
+    # ------------------------------------------------------------------------
+
+    R = orbitfit.compute_stream_rotation_matrix(stream_c, align_lon='min')
 
     # rotate all data to stream coordinates
     rot_rep = orbitfit.rotate_sph_coordinate(stream_c, R)
@@ -131,6 +162,7 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
     data,err = observe_data(rot_rep, stream_v)
     # _ = plot_data(data, err, R)
     # pl.show()
+    # return
 
     # write data out
     with open(data_path, 'wb') as f:
@@ -140,10 +172,13 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
     freeze = dict()
 
     # these estimated from the plots
-    freeze['phi2_sigma'] = np.radians(0.25)
-    freeze['d_sigma'] = 0.35
-    freeze['vr_sigma'] = (1.5*u.km/u.s).decompose(galactic).value
-    freeze['mu_sigma'] = (0.01*u.mas/u.yr).decompose(galactic).value
+    mean_d = stream_c.distance.mean()
+    freeze['phi2_sigma'] = (rtide / mean_d).decompose().value[0]
+    freeze['d_sigma'] = rtide.value[0]
+    freeze['vr_sigma'] = vdisp.decompose(galactic).value[0]
+    term1 = (np.sqrt(stream_v[0]**2 + stream_v[1]**2).mean()/mean_d*rtide).to(u.mas/u.yr, equivalencies=u.dimensionless_angles())
+    term2 = (vdisp/mean_d).to(u.mas/u.yr, equivalencies=u.dimensionless_angles())
+    freeze['mu_sigma'] = (term1+term2).decompose(galactic).value[0]
 
     potential_param_names = list(fit_potential.parameters.keys())
     # for k in potential_param_names:
@@ -170,10 +205,12 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
     dt = 1.
     n_steps = 120
 
-    # orbit = potential.integrate_orbit(_mcmc_sample_to_w0(p0_guess, R), dt=dt, nsteps=n_steps)
+    # orbit = true_potential.integrate_orbit(_mcmc_sample_to_w0(p0_guess, R), dt=dt, nsteps=n_steps)
     # fig,axes = plot_data(data, err, R)
     # _ = plot_orbit(orbit, fig=fig)
+    # _ = plot_orbit(mean_orbit[-300:], fig=fig)
     # pl.show()
+    # return
 
     # first, optimize to get a good guess to initialize MCMC
     args = (data, err, R, fit_potential.__class__, potential_param_names, ln_potential_prior,
