@@ -67,7 +67,7 @@ def observe_data(c, v):
     err['distance'] = 1E5*u.kpc
     err['mul'] = 1E5*u.arcsecond/u.yr
     err['mub'] = 1E5*u.arcsecond/u.yr
-    err['vr'] = 10*u.km/u.s
+    err['vr'] = 1*u.km/u.s
 
     data['phi1'] = c.lon
     data['phi2'] = c.lat
