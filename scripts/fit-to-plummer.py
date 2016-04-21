@@ -245,6 +245,7 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
     logger.info("running mcmc sampler with {} walkers for {} steps".format(n_walkers, n_iterations))
     _ = sampler.run_mcmc(mcmc_p0, N=n_burn)
     logger.debug("finished burn-in")
+    sampler.reset()
 
     restart_p = np.median(sampler.chain[:,-1], axis=0)
     mcmc_p0 = emcee.utils.sample_ball(restart_p, 1E-3*restart_p, size=n_walkers)
