@@ -94,8 +94,8 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
         os.remove(data_path)
 
     # potential to generate stream in
-    true_potential = gp.PlummerPotential(m=1E12, b=30, units=galactic)
-    fit_potential = gp.PlummerPotential(m=1E12, b=30, units=galactic)
+    true_potential = gp.PlummerPotential(m=1E12, b=10, units=galactic)
+    fit_potential = gp.PlummerPotential(m=1E12, b=10, units=galactic)
 
     # integrate some orbit and generate mock stream
     w0 = gd.CartesianPhaseSpacePosition(pos=[0.,22,10]*u.kpc,
