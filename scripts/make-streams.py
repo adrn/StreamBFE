@@ -21,6 +21,7 @@ from gary.dynamics.orbitfit import rotate_sph_coordinate
 # Project
 from streambfe import potentials, FRAME
 from streambfe.coordinates import compute_stream_rotation_matrix
+from streambfe.plot import plot_orbit, plot_data, plot_stream_obs
 
 # this sets the number of simulations to run
 per_apo = [(15.,25)]*8 + [(25.,60)]*8 + [(85.,125)]*8
@@ -113,21 +114,21 @@ def main(progenitor_mass, n_stars=1024, seed=42):
                 ball_w = w0.w(galactic)[:,0]
                 ball_std = std.w(galactic)[:,0]
                 ball_w0 = np.random.normal(ball_w, ball_std, size=(n_stars,6))
-                w0 = gd.CartesianPhaseSpacePosition.from_w(ball_w0.T, units=galactic)
+                ball_w0 = gd.CartesianPhaseSpacePosition.from_w(ball_w0.T, units=galactic)
 
-                stream_orbits = potential.integrate_orbit(w0, dt=1., nsteps=n_steps)
+                stream_orbits = potential.integrate_orbit(ball_w0, dt=1., nsteps=n_steps)
                 stream = stream_orbits[-1]
 
                 # save simulated stream data
                 g.attrs['mass'] = progenitor_mass
 
-                g.create_dataset('xyz', shape=stream.pos.shape, dtype=np.float64,
+                g.create_dataset('pos', shape=stream.pos.shape, dtype=np.float64,
                                  data=stream.pos.decompose(galactic).value)
-                g['xyz'].attrs['unit'] = 'kpc'
+                g['pos'].attrs['unit'] = 'kpc'
 
-                g.create_dataset('vxyz', shape=stream.vel.shape, dtype=np.float64,
+                g.create_dataset('vel', shape=stream.vel.shape, dtype=np.float64,
                                  data=stream.vel.decompose(galactic).value)
-                g['vxyz'].attrs['unit'] = 'kpc/Myr'
+                g['vel'].attrs['unit'] = 'kpc/Myr'
 
                 # plot the orbit in cartesian coords
                 fig = prog_orbit.plot(color='lightblue', alpha=0.5)
@@ -147,50 +148,33 @@ def main(progenitor_mass, n_stars=1024, seed=42):
                 # pl.show()
                 # return
 
-                # leading tail should be +lon (mu_lon > 0) -- figure out if we need to flip the poles
-                vsph_gal = np.vstack([
-                    (stream_v[0]*stream_rot.distance * np.cos(stream_rot.lat)).to(u.km/u.s, equivalencies=u.dimensionless_angles()).value,
-                    (stream_v[1]*stream_rot.distance).to(u.km/u.s, equivalencies=u.dimensionless_angles()).value,
-                    stream_v[2].to(u.km/u.s, equivalencies=u.dimensionless_angles()).value
-                ])*u.km/u.s
-                vxyz_gal = gc.spherical_to_cartesian(stream_rot, vsph_gal)
+                # leading tail should be +lon -- figure out if we need to flip the poles
+                E_plus_lon = stream[stream_rot.lon.argmax()].energy(potential)
+                E_minus_lon = stream[stream_rot.lon.wrap_at(180*u.degree).argmin()].energy(potential)
+                E_diff = E_plus_lon - E_minus_lon
 
-                vxyz_rot = R1.dot(vxyz_gal)
-                vsph_rot = gc.cartesian_to_spherical(stream_rot, vxyz_rot)
-                mu_lon = (vsph_rot[0]/(stream_rot.distance * np.cos(stream_rot.lat))).to(u.mas/u.yr, equivalencies=u.dimensionless_angles())
-                # mu_lat = (vsph_rot[1]/stream_rot.distance).to(u.mas/u.yr, equivalencies=u.dimensionless_angles())
-
-                pl.figure()
-                pl.scatter(stream_rot.lon.wrap_at(180*u.degree).degree, mu_lon)
-
-                # pl.figure()
-                # pl.scatter(stream_rot.lon.wrap_at(180*u.degree).degree, mu_lat)
-
-                # pl.show()
-                # return
-
-                if np.any(mu_lon < 0) and np.any(mu_lon > 0):
-                    raise ValueError("Sign flip in longitude proper motions")
-
-                if np.all(mu_lon < 0):
+                # E_diff should be < 0 if the leading tail is at positive lon
+                if E_diff > 0:
                     flip_R = rotation_matrix(180*u.degree, 'x')
-                    stream_rot = rotate_sph_coordinate(stream_rot, flip_R)
+                    lon_sign = -1.
                 else:
                     flip_R = 1.
+                    lon_sign = 1.
 
-                R2 = rotation_matrix(-stream_rot.lon.wrap_at(180*u.degree).min(), 'z')
-                R = R2*flip_R*R1
+                lon_R = rotation_matrix(lon_sign*stream_rot.lon.wrap_at(180*u.degree).min(), 'z')
+                R = lon_R*flip_R*R1
 
-                stream_c,stream_v = stream.to_frame(coord.Galactic, **FRAME)
-                derp = rotate_sph_coordinate(stream_c, R1)
+                stream_rot = rotate_sph_coordinate(stream_c, R)
 
-                pl.figure()
-                pl.scatter(derp.lon.degree, derp.lat.degree)
-                pl.show()
-                return
+                # pl.figure()
+                # pl.scatter(stream_rot.lon.degree, stream_rot.lat.degree)
+                # pl.show()
 
-                # plot the orbit on the sky
-                # TODO:
+                # plot the orbit on the sky in galactic and in stream coordinates
+                fig_gal,_ = plot_stream_obs(stream_c, stream_v)
+                fig_rot,_ = plot_stream_obs(stream_rot, stream_v)
+                fig_gal.savefig(os.path.join(this_plot_path, "stream-{}-gal.png".format(i)))
+                fig_rot.savefig(os.path.join(this_plot_path, "stream-{}-rot.png".format(i)))
 
                 pl.close('all')
 
