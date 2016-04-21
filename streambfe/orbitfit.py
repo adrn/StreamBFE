@@ -1,5 +1,3 @@
-""" ...explain... """
-
 from __future__ import division, print_function
 
 __author__ = "adrn <adrn@astro.columbia.edu>"
@@ -149,8 +147,8 @@ def ln_orbitfit_likelihood(p, data, err, R, Potential, potential_param_names, ln
     w0 = _mcmc_sample_to_w0([phi2,d,mul,mub,vr], R)[:,0]
 
     # HACK: a prior on velocities
-    # vmag2 = np.sum(w0[3:]**2)
-    # chi2 += -vmag2 / (0.15**2)
+    vmag2 = np.sum(w0[3:]**2)
+    chi2 += -vmag2 / (0.15**2)
 
     # integrate the orbit
     potential = Potential(units=galactic, **potential_params)
