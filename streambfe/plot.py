@@ -62,7 +62,7 @@ def plot_data(data, err, R, fig=None, gal=True):
 
     style = dict(ls='none', marker='.', ecolor='#aaaaaa')
 
-    axes[0,0].errorbar(lon.degree, lat.degree, 1E-8*g.b.degree, **style)
+    axes[0,0].errorbar(lon.degree, lat.degree, 1E-8*lat.degree, **style)
     axes[1,0].errorbar(lon.degree, data['distance'].value, err['distance'].value, **style)
 
     axes[0,1].errorbar(lon.degree, galactic.decompose(data['mul']).value,
