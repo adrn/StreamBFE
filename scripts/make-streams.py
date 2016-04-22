@@ -58,7 +58,7 @@ def peri_apo_to_random_w0(pericenter, apocenter, potential):
 
     return w0
 
-def main(progenitor_mass, n_stars=1024, seed=42):
+def main(progenitor_mass, n_stars, seed=42):
     np.random.seed(seed)
 
     _path,_ = os.path.split(os.path.abspath(__file__))
@@ -165,6 +165,7 @@ def main(progenitor_mass, n_stars=1024, seed=42):
                 R = lon_R*flip_R*R1
 
                 stream_rot = rotate_sph_coordinate(stream_c, R)
+                g['R'] = R
 
                 # pl.figure()
                 # pl.scatter(stream_rot.lon.degree, stream_rot.lat.degree)
@@ -177,8 +178,6 @@ def main(progenitor_mass, n_stars=1024, seed=42):
                 fig_rot.savefig(os.path.join(this_plot_path, "stream-{}-rot.png".format(i)))
 
                 pl.close('all')
-
-                break # HACK TODO: remove this
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
@@ -194,6 +193,8 @@ if __name__ == "__main__":
                         type=int, help="Random number seed")
     parser.add_argument("--prog-mass", dest="prog_mass", default=1E4,
                         type=float, help="Progenitor mass")
+    parser.add_argument("--nstars", dest="n_stars", default=128,
+                        type=int, help="Number of stars")
 
     args = parser.parse_args()
 
@@ -205,4 +206,4 @@ if __name__ == "__main__":
     else:
         logger.setLevel(logging.INFO)
 
-    main(progenitor_mass=args.prog_mass, seed=args.seed)
+    main(n_stars=args.n_stars, progenitor_mass=args.prog_mass, seed=args.seed)
