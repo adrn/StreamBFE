@@ -6,6 +6,7 @@ import os
 import sys
 
 # Third-party
+from astropy.coordinates.angles import rotation_matrix
 from astropy.constants import G
 import astropy.coordinates as coord
 from astropy import log as logger
@@ -26,6 +27,7 @@ from gary.dynamics import mockstream, orbitfit
 
 # Project
 from streambfe import FRAME
+from streambfe.coordinates import compute_stream_rotation_matrix
 from streambfe.orbitfit import ln_orbitfit_prior, ln_orbitfit_likelihood, _mcmc_sample_to_w0
 from streambfe.plot import *
 
@@ -95,14 +97,14 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
         os.remove(data_path)
 
     # potential to generate stream in
-    true_potential = gp.PlummerPotential(m=1E12, b=10, units=galactic)
-    fit_potential = gp.PlummerPotential(m=1E12, b=10, units=galactic)
+    true_potential = gp.PlummerPotential(m=6E11, b=20, units=galactic)
+    fit_potential = gp.PlummerPotential(m=6E11, b=20, units=galactic)
 
     # integrate some orbit and generate mock stream
-    w0 = gd.CartesianPhaseSpacePosition(pos=[0.,22,10]*u.kpc,
+    w0 = gd.CartesianPhaseSpacePosition(pos=[0.,32,10]*u.kpc,
                                         vel=[-190,-25,-10]*u.km/u.s)
 
-    m = 1E5*u.Msun
+    m = 1E4*u.Msun
     rtide = (m/true_potential.mass_enclosed(w0.pos))**(1/3.) * np.sqrt(np.sum(w0.pos**2))
     vdisp = np.sqrt(G*m/(2*rtide)).to(u.km/u.s)
     logger.debug("rtide, vdisp: {}, {}".format(rtide, vdisp))
@@ -137,22 +139,43 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
                                              vel=[-190,-25,-10]*u.km/u.s)
 
     std = gd.CartesianPhaseSpacePosition(pos=[rtide.value]*3*u.kpc,
-                                         vel=[vdisp.value]*3*u.km/u.s)
+                                         vel=[vdisp.value/2.]*3*u.km/u.s)
 
     ball_w = mean_w0.w(galactic)[:,0]
     ball_std = std.w(galactic)[:,0]
     ball_w0 = emcee.utils.sample_ball(ball_w, ball_std, size=128)
     w0 = gd.CartesianPhaseSpacePosition.from_w(ball_w0.T, units=galactic)
 
-    mean_orbit = true_potential.integrate_orbit(mean_w0, dt=1., nsteps=6000)
-    stream_orbits = true_potential.integrate_orbit(w0, dt=1., nsteps=5800)
+    mean_orbit = true_potential.integrate_orbit(mean_w0, dt=1., nsteps=5180)
+    stream_orbits = true_potential.integrate_orbit(w0, dt=1., nsteps=5140)
     stream = stream_orbits[-1]
     stream_c,stream_v = stream.to_frame(coord.Galactic, **FRAME)
     # ------------------------------------------------------------------------
 
-    R = orbitfit.compute_stream_rotation_matrix(stream_c, align_lon='min')
+    R1 = compute_stream_rotation_matrix(stream_c, zero_pt="median")
+    stream_rot = orbitfit.rotate_sph_coordinate(stream_c, R1)
 
-    # rotate all data to stream coordinates
+    # pl.figure()
+    # pl.scatter(stream_rot.lon.wrap_at(180*u.degree).degree, stream_rot.lat.degree)
+    # pl.show()
+    # return
+
+    # leading tail should be +lon -- figure out if we need to flip the poles
+    E_plus_lon = stream[stream_rot.lon.argmax()].energy(true_potential)
+    E_minus_lon = stream[stream_rot.lon.wrap_at(180*u.degree).argmin()].energy(true_potential)
+    E_diff = E_plus_lon - E_minus_lon
+
+    # E_diff should be < 0 if the leading tail is at positive lon
+    if E_diff > 0:
+        flip_R = rotation_matrix(180*u.degree, 'x')
+        lon_sign = -1.
+    else:
+        flip_R = 1.
+        lon_sign = 1.
+
+    lon_R = rotation_matrix(lon_sign*stream_rot.lon.wrap_at(180*u.degree).min(), 'z')
+    R = lon_R*flip_R*R1
+
     rot_rep = orbitfit.rotate_sph_coordinate(stream_c, R)
 
     # _ = plot_stream_obs(stream_c, stream_v)
@@ -202,13 +225,13 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
     logger.debug("Initial guess: {}".format(p0_guess))
 
     # integration stuff -- using leading tail, starting near prog, so need to integrate forward?
-    dt = 1.
+    dt = -1.
     n_steps = 120
 
     # orbit = true_potential.integrate_orbit(_mcmc_sample_to_w0(p0_guess, R), dt=dt, nsteps=n_steps)
     # fig,axes = plot_data(data, err, R)
-    # _ = plot_orbit(orbit, fig=fig)
-    # _ = plot_orbit(mean_orbit[-300:], fig=fig)
+    # # _ = plot_orbit(orbit, fig=fig)
+    # _ = plot_orbit(mean_orbit[-100:], fig=fig)
     # pl.show()
     # return
 
@@ -225,7 +248,7 @@ def main(mpi=False, n_walkers=None, n_burn=256, n_iterations=None, overwrite=Fal
         pool.close()
         raise ValueError("Failed to optimize!")
 
-    # fit_potential = fit_potential.__class__(m=res.x[-2], b=res.x[-1], units=galactic)
+    fit_potential = fit_potential.__class__(m=res.x[-2], b=res.x[-1], units=galactic)
     # orbit = fit_potential.integrate_orbit(_mcmc_sample_to_w0(res.x, R), dt=dt, nsteps=n_steps)
     # fig,axes = plot_data(data, err, R)
     # _ = plot_orbit(orbit, fig=fig)
