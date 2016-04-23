@@ -94,8 +94,7 @@ def main(progenitor_mass, n_stars, seed=42):
 
                 # integrate orbit
                 logger.debug("Integrating for {} steps".format(n_steps))
-                prog_orbit = potential.integrate_orbit(w0, dt=-1., nsteps=n_steps, t1=float(n_steps))
-                prog_orbit = prog_orbit[::-1]
+                prog_orbit = potential.integrate_orbit(w0, dt=1., nsteps=n_steps, t1=float(n_steps))
 
                 m = progenitor_mass*u.Msun
                 rtide = (m/potential.mass_enclosed(w0.pos))**(1/3.) * np.sqrt(np.sum(w0.pos**2))
@@ -108,16 +107,21 @@ def main(progenitor_mass, n_stars, seed=42):
                 #                                   Integrator=gi.DOPRI853Integrator)
 
                 # Option 2: integrate a ball of test particle orbits
-                std = gd.CartesianPhaseSpacePosition(pos=[rtide.value]*3*u.kpc,
-                                                     vel=[vdisp.value]*3*u.km/u.s)
+                # std = gd.CartesianPhaseSpacePosition(pos=[rtide.value]*3*u.kpc,
+                #                                      vel=[vdisp.value]*3*u.km/u.s)
 
-                ball_w = w0.w(galactic)[:,0]
-                ball_std = std.w(galactic)[:,0]
-                ball_w0 = np.random.normal(ball_w, ball_std, size=(n_stars,6))
-                ball_w0 = gd.CartesianPhaseSpacePosition.from_w(ball_w0.T, units=galactic)
+                # ball_w = w0.w(galactic)[:,0]
+                # ball_std = std.w(galactic)[:,0]
+                # ball_w0 = np.random.normal(ball_w, ball_std, size=(n_stars,6))
+                # ball_w0 = gd.CartesianPhaseSpacePosition.from_w(ball_w0.T, units=galactic)
 
-                stream_orbits = potential.integrate_orbit(ball_w0, dt=1., nsteps=n_steps)
-                stream = stream_orbits[-1]
+                # stream_orbits = potential.integrate_orbit(ball_w0, dt=1., nsteps=n_steps)
+                # stream = stream_orbits[-1]
+
+                # Option 3: just take single orbit, convolve with uncertainties
+                prog_orbit = potential.integrate_orbit(w0, dt=0.2, nsteps=256, t1=float(n_steps))
+                prog_orbit = prog_orbit[::2]
+                stream = gd.CartesianPhaseSpacePosition(pos=prog_orbit.pos, vel=prog_orbit.vel)
 
                 # save simulated stream data
                 g.attrs['mass'] = progenitor_mass
@@ -141,7 +145,7 @@ def main(progenitor_mass, n_stars, seed=42):
                 # convert to sky coordinates and compute the stream rotation matrix
                 stream_c,stream_v = stream.to_frame(coord.Galactic, **FRAME)
                 R1 = compute_stream_rotation_matrix(stream_c, zero_pt="median")
-                stream_rot = rotate_sph_coordinate(stream_c, R1)
+                stream_rot1 = rotate_sph_coordinate(stream_c, R1)
 
                 # pl.figure()
                 # pl.scatter(stream_rot.lon.wrap_at(180*u.degree).degree, stream_rot.lat.degree)
@@ -149,22 +153,30 @@ def main(progenitor_mass, n_stars, seed=42):
                 # return
 
                 # leading tail should be +lon -- figure out if we need to flip the poles
-                E_plus_lon = stream[stream_rot.lon.argmax()].energy(potential)
-                E_minus_lon = stream[stream_rot.lon.wrap_at(180*u.degree).argmin()].energy(potential)
+                E_plus_lon = stream[stream_rot1.lon.argmax()].energy(potential)
+                E_minus_lon = stream[stream_rot1.lon.wrap_at(180*u.degree).argmin()].energy(potential)
                 E_diff = E_plus_lon - E_minus_lon
 
                 # E_diff should be < 0 if the leading tail is at positive lon
                 if E_diff > 0:
                     flip_R = rotation_matrix(180*u.degree, 'x')
-                    lon_sign = -1.
+                    stream_rot2 = rotate_sph_coordinate(stream_rot1, flip_R)
+                    # lon_sign = 1.
                 else:
                     flip_R = 1.
-                    lon_sign = 1.
+                    stream_rot2 = stream_rot1
+                    # lon_sign = -1.
 
-                lon_R = rotation_matrix(lon_sign*stream_rot.lon.wrap_at(180*u.degree).min(), 'z')
-                R = lon_R*flip_R*R1
+                logger.debug("Min. lon before align: {:.2e}".format(stream_rot2.lon.wrap_at(180*u.degree).degree.min()))
 
-                stream_rot = rotate_sph_coordinate(stream_c, R)
+                lon_R = rotation_matrix(stream_rot2.lon.wrap_at(180*u.degree).min(), 'z')
+                stream_rot3 = rotate_sph_coordinate(stream_rot2, lon_R)
+                stream_rot3.lon.degree.min()
+                logger.debug("Min. lon after align: {:.2e}".format(stream_rot3.lon.wrap_at(180*u.degree).degree.min()))
+
+                R = lon_R * flip_R * R1
+
+                stream_rot = stream_rot3
                 g['R'] = R
 
                 # pl.figure()
@@ -178,6 +190,8 @@ def main(progenitor_mass, n_stars, seed=42):
                 fig_rot.savefig(os.path.join(this_plot_path, "stream-{}-rot.png".format(i)))
 
                 pl.close('all')
+
+                # if i == 7: return
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
