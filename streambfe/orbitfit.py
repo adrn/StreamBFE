@@ -7,6 +7,7 @@ import abc
 from collections import OrderedDict as odict
 
 # Third-party
+from astropy.constants import G
 import astropy.units as u
 import astropy.coordinates as coord
 import numpy as np
@@ -24,6 +25,8 @@ import biff
 
 # Project
 from .galcen_frame import FRAME
+
+_G = G.decompose(galactic).value
 
 __all__ = ['OrbitfitModel', 'SCFOrbitfitModel', 'PlummerOrbitfitModel']
 
@@ -253,10 +256,18 @@ class SCFOrbitfitModel(OrbitfitModel):
         super(SCFOrbitfitModel, self).__init__(data, err, R, biff.SCFPotential, [],
                                                dt, n_steps, freeze)
         self.nmax = nmax
+        self._xyz = np.zeros((1024, 3))
+        self._xyz[:,0] = np.logspace(-1,2.5,self._xyz.shape[0])
 
     def _ln_potential_prior(self, pars):
         lp = 0.
-        lp = -(pars['Snlm']**2).sum()
+        lp += -(pars['Snlm']**2).sum()
+
+        grad = biff.gradient(self._xyz, Snlm=pars['Snlm'], Tnlm=pars['Tnlm'],
+                             nmax=self.nmax, lmax=0, G=_G, M=pars['m'], r_s=pars['r_s'])
+        if np.any(grad < 0.):
+            return -np.inf
+
         return lp
 
     def _unpack_potential(self, count, p):
