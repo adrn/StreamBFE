@@ -3,6 +3,7 @@ __author__ = "adrn <adrn@astro.columbia.edu>"
 # Standard library
 import os
 import sys
+import pickle
 
 # Third-party
 from astropy import log as logger
@@ -13,7 +14,6 @@ import matplotlib.pyplot as pl
 import numpy as np
 import scipy.optimize as so
 import h5py
-import gary.potential as gp
 import gary.dynamics as gd
 from gary.util import get_pool
 from gary.units import galactic
@@ -26,7 +26,7 @@ from streambfe.plot import plot_data, plot_orbit
 from streambfe import orbitfit
 
 def main(potential_name, index, n_walkers=None, n_burn=0, n_iterations=1024,
-         seed=42, mpi=False, overwrite=False):
+         seed=42, mpi=False, overwrite=False, dont_optimize=False):
     np.random.seed(seed)
     pool = get_pool(mpi=mpi)
 
@@ -39,6 +39,7 @@ def main(potential_name, index, n_walkers=None, n_burn=0, n_iterations=1024,
     output_path = os.path.join(top_path, "output", "orbitfit", true_potential_name, potential_name)
     plot_path = os.path.join(output_path, "plots")
     sampler_file = os.path.join(output_path, "emcee.h5")
+    model_file = os.path.join(output_path, "model-{}.pickle".format(index))
 
     if os.path.exists(sampler_file):
         with h5py.File(sampler_file, 'r') as f:
@@ -61,6 +62,7 @@ def main(potential_name, index, n_walkers=None, n_burn=0, n_iterations=1024,
         freeze['potential_b'] = 10.
 
         potential_guess = [6E11]
+        mcmc_potential_std = [1E8]
 
     elif potential_name == 'scf':
         Model = orbitfit.SCFOrbitfitModel
@@ -70,6 +72,7 @@ def main(potential_name, index, n_walkers=None, n_burn=0, n_iterations=1024,
         freeze['potential_r_s'] = 10.
 
         potential_guess = [6E11] + [1.3,0,0,0,0,0,0,0,0] # HACK: try this first
+        mcmc_potential_std = [1E8] + [1E-3]*9
 
     else:
         raise ValueError("Invalid potential name '{}'".format(potential_name))
@@ -91,13 +94,17 @@ def main(potential_name, index, n_walkers=None, n_burn=0, n_iterations=1024,
     # pl.show()
 
     # freeze all intrinsic widths (all are smaller than errors)
-    freeze['phi2_sigma'] = 1E-5
+    freeze['phi2_sigma'] = 1E-7
     freeze['d_sigma'] = 1E-3
     freeze['vr_sigma'] = 1E-5
     freeze['mu_sigma'] = 1E-7
 
     model = Model(data=data, err=err, R=R, dt=dt, n_steps=int(1.5*n_steps),
                   freeze=freeze, **kw)
+
+    # pickle the model
+    with open(model_file, 'wb') as f:
+        pickle.dump(model, f)
 
     # starting position for optimization
     p_guess = ([stream_rot[0].lat.radian, stream_rot[0].distance.value] +
@@ -106,30 +113,38 @@ def main(potential_name, index, n_walkers=None, n_burn=0, n_iterations=1024,
 
     logger.debug("ln_posterior at initialization: {}".format(model(p_guess)))
 
-    logger.debug("optimizing ln_posterior first...")
-    res = so.minimize(lambda p: -model(p), x0=p_guess, method='powell')
-    p_best = res.x
+    if n_walkers is None:
+        n_walkers = 8*len(p_guess)
 
-    logger.debug("...done. optimization returned: {}".format(p_best))
-    if not res.success:
-        pool.close()
-        raise ValueError("Failed to optimize!")
-    logger.debug("ln_posterior at optimized p: {}".format(model(p_best)))
+    if not dont_optimize:
+        logger.debug("optimizing ln_posterior first...")
+        res = so.minimize(lambda p: -model(p), x0=p_guess, method='powell')
+        p_best = res.x
 
-    # plot the orbit of the optimized parameters
-    orbit = true_potential.integrate_orbit(model._mcmc_sample_to_w0(res.x),
-                                           dt=dt, nsteps=n_steps)
-    fig,_ = plot_data(data, err, R, gal=False)
-    fig,_ = plot_orbit(orbit, fig=fig, R=R, gal=False)
-    fig.savefig(os.path.join(plot_path, "optimized-{}.png".format(index)))
+        logger.debug("...done. optimization returned: {}".format(p_best))
+        if not res.success:
+            pool.close()
+            raise ValueError("Failed to optimize!")
+        logger.debug("ln_posterior at optimized p: {}".format(model(p_best)))
+
+        # plot the orbit of the optimized parameters
+        orbit = true_potential.integrate_orbit(model._mcmc_sample_to_w0(res.x),
+                                               dt=dt, nsteps=n_steps)
+        fig,_ = plot_data(data, err, R, gal=False)
+        fig,_ = plot_orbit(orbit, fig=fig, R=R, gal=False)
+        fig.savefig(os.path.join(plot_path, "optimized-{}.png".format(index)))
+
+        mcmc_p0 = emcee.utils.sample_ball(res.x, 1E-3*np.array(p_best), size=n_walkers)
+    else:
+
+        mcmc_std = ([freeze['phi2_sigma'], freeze['d_sigma'], freeze['mu_sigma']] +
+                    [freeze['mu_sigma'], freeze['vr_sigma']] + mcmc_potential_std)
+        mcmc_p0 = emcee.utils.sample_ball(p_guess, mcmc_std, size=n_walkers)
 
     # now, create initial conditions for MCMC walkers in a small ball around the
     #   optimized parameter vector
-    if n_walkers is None:
-        n_walkers = 8*len(p_best)
     sampler = emcee.EnsembleSampler(nwalkers=n_walkers, dim=len(p_best),
                                     lnpostfn=model, pool=pool)
-    mcmc_p0 = emcee.utils.sample_ball(res.x, 1E-3*np.array(p_best), size=n_walkers)
 
     logger.info("running mcmc sampler with {} walkers for {} steps".format(n_walkers, n_iterations))
     if n_burn > 0:
@@ -200,6 +215,9 @@ if __name__ == "__main__":
                         type=str, help="Name of the fitting potential can be: "
                                        "plummer, scf")
 
+    parser.add_argument("--dont-optimize", action="store_true", dest="dont_optimize",
+                        default=False, help="Don't optimize, just sample from prior.")
+
     # emcee
     parser.add_argument("--mpi", dest="mpi", default=False, action="store_true",
                         help="Run with MPI.")
@@ -220,4 +238,4 @@ if __name__ == "__main__":
 
     main(potential_name=args.potential_name, index=args.index, seed=args.seed,
          mpi=args.mpi, n_walkers=args.mcmc_walkers, n_iterations=args.mcmc_steps,
-         overwrite=args.overwrite)
+         overwrite=args.overwrite, dont_optimize=args.dont_optimize)
