@@ -268,6 +268,11 @@ class SCFOrbitfitModel(OrbitfitModel):
         if np.any(grad < 0.):
             return -np.inf
 
+        dens = biff.density(self._xyz, Snlm=pars['Snlm'], Tnlm=pars['Tnlm'],
+                            nmax=self.nmax, lmax=0, M=pars['m'], r_s=pars['r_s'])
+        if np.any(dens < 0.):
+            return -np.inf
+
         return lp
 
     def _unpack_potential(self, count, p):

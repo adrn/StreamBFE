@@ -144,13 +144,15 @@ def main(potential_name, index, pool, n_walkers=None, n_burn=0, n_iterations=102
     sampler = emcee.EnsembleSampler(nwalkers=n_walkers, dim=len(p_guess),
                                     lnpostfn=model, pool=pool)
 
-    logger.info("running mcmc sampler with {} walkers for {} steps".format(n_walkers, n_iterations))
     if n_burn > 0:
+        logger.info("burning in sampler for {} steps".format(n_burn))
         pos,_,_ = sampler.run_mcmc(mcmc_p0, N=n_burn)
         logger.debug("finished burn-in")
         sampler.reset()
     else:
         pos = mcmc_p0
+
+    logger.info("running mcmc sampler with {} walkers for {} steps".format(n_walkers, n_iterations))
 
     # restart_p = np.median(sampler.chain[:,-1], axis=0)
     # mcmc_p0 = emcee.utils.sample_ball(restart_p, 1E-3*restart_p, size=n_walkers)
@@ -282,6 +284,8 @@ if __name__ == "__main__":
                         help="Number of walkers.")
     parser.add_argument("--mcmc-steps", dest="mcmc_steps", type=int,
                         help="Number of steps to take MCMC.")
+    parser.add_argument("--mcmc-burn", dest="mcmc_burn", type=int,
+                        help="Number of burn-in steps to take MCMC.")
 
     parser.add_argument("--continue", action="store_true", dest="_continue",
                         default=False, help="Continue the mcmc")
@@ -304,6 +308,6 @@ if __name__ == "__main__":
                           pool=pool, n_iterations=args.mcmc_steps)
         sys.exit(0)
 
-    main(potential_name=args.potential_name, index=args.index,
+    main(potential_name=args.potential_name, index=args.index, n_burn=args.mcmc_burn,
          pool=pool, n_walkers=args.mcmc_walkers, n_iterations=args.mcmc_steps,
          overwrite=args.overwrite, dont_optimize=args.dont_optimize)
