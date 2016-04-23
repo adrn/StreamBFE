@@ -231,16 +231,14 @@ def continue_sampling(potential_name, index, pool, n_iterations):
     with h5py.File(sampler_file, 'r+') as f:
         g = f[str(index)]
         prev_chain = g['chain'][:]
-        prev_acceptance_fraction = g['acceptance_fraction'][:]
         prev_lnprobability = g['lnprobability'][:]
         del g['chain']
         del g['acceptance_fraction']
         del g['lnprobability']
 
         g['chain'] = np.hstack((prev_chain, sampler.chain))
-        g['acceptance_fraction'] = np.vstack((prev_acceptance_fraction,
-                                              sampler.acceptance_fraction))
-        g['lnprobability'] = np.vstack((prev_lnprobability, sampler.lnprobability))
+        g['acceptance_fraction'] = sampler.acceptance_fraction
+        g['lnprobability'] = np.hstack((prev_lnprobability, sampler.lnprobability))
 
     if n_iterations > 256:
         logger.debug("plotting...")
