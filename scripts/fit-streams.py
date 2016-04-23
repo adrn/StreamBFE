@@ -187,10 +187,11 @@ def main(potential_name, index, n_walkers=None, n_burn=0, n_iterations=1024,
         flatchain = np.vstack(sampler.chain[:,-256::4])
 
         fig,_ = plot_data(data, err, R, gal=False)
-        for link in flatchain:
+        for i,link in enumerate(flatchain):
             orbit = true_potential.integrate_orbit(model._mcmc_sample_to_w0(link),
                                                    dt=dt, nsteps=n_steps)
             fig,_ = plot_orbit(orbit, fig=fig, R=R, gal=False, alpha=0.25)
+            if i == 32: break
         fig.savefig(os.path.join(plot_path, "mcmc-{}.png".format(index)))
 
     sys.exit(0)
