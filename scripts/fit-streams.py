@@ -144,13 +144,15 @@ def main(potential_name, index, pool, n_walkers=None, n_burn=0, n_iterations=102
     sampler = emcee.EnsembleSampler(nwalkers=n_walkers, dim=len(p_guess),
                                     lnpostfn=model, pool=pool)
 
-    logger.info("running mcmc sampler with {} walkers for {} steps".format(n_walkers, n_iterations))
     if n_burn > 0:
+        logger.info("burning in sampler for {} steps".format(n_burn))
         pos,_,_ = sampler.run_mcmc(mcmc_p0, N=n_burn)
         logger.debug("finished burn-in")
         sampler.reset()
     else:
         pos = mcmc_p0
+
+    logger.info("running mcmc sampler with {} walkers for {} steps".format(n_walkers, n_iterations))
 
     # restart_p = np.median(sampler.chain[:,-1], axis=0)
     # mcmc_p0 = emcee.utils.sample_ball(restart_p, 1E-3*restart_p, size=n_walkers)
