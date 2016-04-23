@@ -282,6 +282,8 @@ if __name__ == "__main__":
                         help="Number of walkers.")
     parser.add_argument("--mcmc-steps", dest="mcmc_steps", type=int,
                         help="Number of steps to take MCMC.")
+    parser.add_argument("--mcmc-burn", dest="mcmc_burn", type=int,
+                        help="Number of burn-in steps to take MCMC.")
 
     parser.add_argument("--continue", action="store_true", dest="_continue",
                         default=False, help="Continue the mcmc")
@@ -304,6 +306,6 @@ if __name__ == "__main__":
                           pool=pool, n_iterations=args.mcmc_steps)
         sys.exit(0)
 
-    main(potential_name=args.potential_name, index=args.index,
+    main(potential_name=args.potential_name, index=args.index, n_burn=args.mcmc_burn,
          pool=pool, n_walkers=args.mcmc_walkers, n_iterations=args.mcmc_steps,
          overwrite=args.overwrite, dont_optimize=args.dont_optimize)
