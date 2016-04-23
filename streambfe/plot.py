@@ -1,6 +1,7 @@
 from __future__ import division, print_function
 
 # Third-party
+import astropy.units as u
 import astropy.coordinates as coord
 import matplotlib.pyplot as pl
 import numpy as np
@@ -12,7 +13,7 @@ from . import FRAME
 
 __all__ = ["plot_stream_obs", "plot_data", "plot_orbit"]
 
-def plot_stream_obs(stream_c, stream_v, **style_kw):
+def plot_stream_obs(stream_c, stream_v, wrap_angle=180*u.degree, **style_kw):
     style = dict(linestyle='none', marker='.', alpha=0.4)
     for k,v in style_kw.items():
         style[k] = v
@@ -29,6 +30,7 @@ def plot_stream_obs(stream_c, stream_v, **style_kw):
         lat = stream_c.lat
         axes[1,1].set_xlabel('$\phi_1$ [deg]')
 
+    lon = lon.wrap_at(wrap_angle)
     axes[0,0].plot(lon.degree, lat.degree, **style)
     axes[1,0].plot(lon.degree, stream_c.distance.value, **style)
 
@@ -43,7 +45,7 @@ def plot_stream_obs(stream_c, stream_v, **style_kw):
 
     return fig,axes
 
-def plot_data(data, err, R, fig=None, gal=True, **style_kw):
+def plot_data(data, err, R, wrap_angle=180*u.degree, fig=None, gal=True, **style_kw):
     if fig is None:
         fig,axes = pl.subplots(2,3,figsize=(12,8), sharex=True)
     else:
@@ -67,6 +69,7 @@ def plot_data(data, err, R, fig=None, gal=True, **style_kw):
     for k,v in style_kw.items():
         style[k] = v
 
+    lon = lon.wrap_at(wrap_angle)
     axes[0,0].errorbar(lon.degree, lat.degree, 1E-8*lat.degree, **style)
     axes[1,0].errorbar(lon.degree, data['distance'].value, err['distance'].value, **style)
 
@@ -87,7 +90,7 @@ def plot_data(data, err, R, fig=None, gal=True, **style_kw):
 
     return fig,axes
 
-def plot_orbit(orbit, fig=None, gal=True, R=None, **style_kw):
+def plot_orbit(orbit, wrap_angle=180*u.degree, fig=None, gal=True, R=None, **style_kw):
     orbit_c, orbit_v = orbit.to_frame(coord.Galactic, **FRAME)
 
     if fig is None:
@@ -110,6 +113,7 @@ def plot_orbit(orbit, fig=None, gal=True, R=None, **style_kw):
         lat = rep.lat
         axes[1,1].set_xlabel('$\phi_1$ [deg]')
 
+    lon = lon.wrap_at(wrap_angle)
     axes[0,0].plot(lon.degree, lat.degree, **style)
     axes[1,0].plot(lon.degree, orbit_c.distance.value, **style)
 
