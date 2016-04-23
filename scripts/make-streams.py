@@ -85,16 +85,18 @@ def main(progenitor_mass, n_stars, seed=42):
                 g.attrs['pericenter'] = per
 
                 # randomly draw integration time
-                n_steps = np.random.randint(2000, 4000)
+                n_steps = 96
+                dt = 0.5
+                _n_steps = np.random.randint(1000, 6000)
                 g.attrs['n_steps'] = n_steps
+                g.attrs['dt'] = dt
 
                 # get random initial conditions for given pericenter, apocenter
                 w0 = peri_apo_to_random_w0(per, apo, potential)
                 # g.attrs['w0'] = w0
 
                 # integrate orbit
-                logger.debug("Integrating for {} steps".format(n_steps))
-                prog_orbit = potential.integrate_orbit(w0, dt=1., nsteps=n_steps, t1=float(n_steps))
+                prog_orbit = potential.integrate_orbit(w0, dt=dt, nsteps=_n_steps)
 
                 m = progenitor_mass*u.Msun
                 rtide = (m/potential.mass_enclosed(w0.pos))**(1/3.) * np.sqrt(np.sum(w0.pos**2))
@@ -119,8 +121,7 @@ def main(progenitor_mass, n_stars, seed=42):
                 # stream = stream_orbits[-1]
 
                 # Option 3: just take single orbit, convolve with uncertainties
-                prog_orbit = potential.integrate_orbit(w0, dt=0.5, nsteps=96, t1=float(n_steps))
-                prog_orbit = prog_orbit[::2]
+                prog_orbit = prog_orbit[-n_steps::2]
                 stream = gd.CartesianPhaseSpacePosition(pos=prog_orbit.pos, vel=prog_orbit.vel)
 
                 # save simulated stream data
