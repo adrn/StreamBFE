@@ -14,6 +14,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.stats import norm
 import six
 
+import gary.potential as gp
 import gary.coordinates as gc
 from gary.dynamics import orbitfit
 import gary.integrate as gi
@@ -24,7 +25,7 @@ import biff
 # Project
 from .galcen_frame import FRAME
 
-__all__ = ['OrbitfitModel']
+__all__ = ['OrbitfitModel', 'SCFOrbitfitModel', 'PlummerOrbitfitModel']
 
 @six.add_metaclass(abc.ABCMeta)
 class OrbitfitModel(object):
@@ -254,7 +255,9 @@ class SCFOrbitfitModel(OrbitfitModel):
         self.nmax = nmax
 
     def _ln_potential_prior(self, pars):
-        return 0.
+        lp = 0.
+        lp = -(pars['Snlm']**2).sum()
+        return lp
 
     def _unpack_potential(self, count, p):
         pars = odict()
@@ -277,3 +280,21 @@ class SCFOrbitfitModel(OrbitfitModel):
         pars['Tnlm'] = np.zeros((self.nmax+1,1,1))
 
         return count, pars
+
+class PlummerOrbitfitModel(OrbitfitModel):
+    def __init__(self, data, err, R, dt, n_steps, freeze=None):
+        super(PlummerOrbitfitModel, self).__init__(data, err, R, gp.PlummerPotential,
+                                                   ['m', 'b'], dt, n_steps, freeze)
+
+    def _ln_potential_prior(self, pars):
+        lp = 0.
+
+        if 'potential_m' not in self.freeze:
+            if pars['m'] < 5E10 or pars['m'] > 5E12:
+                return -np.inf
+
+        if 'potential_b' not in self.freeze:
+            if pars['b'] < 0.1 or pars['b'] > 100.:
+                return -np.inf
+
+        return lp
