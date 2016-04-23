@@ -119,7 +119,7 @@ def main(progenitor_mass, n_stars, seed=42):
                 # stream = stream_orbits[-1]
 
                 # Option 3: just take single orbit, convolve with uncertainties
-                prog_orbit = potential.integrate_orbit(w0, dt=0.2, nsteps=256, t1=float(n_steps))
+                prog_orbit = potential.integrate_orbit(w0, dt=0.5, nsteps=96, t1=float(n_steps))
                 prog_orbit = prog_orbit[::2]
                 stream = gd.CartesianPhaseSpacePosition(pos=prog_orbit.pos, vel=prog_orbit.vel)
 
@@ -146,6 +146,12 @@ def main(progenitor_mass, n_stars, seed=42):
                 stream_c,stream_v = stream.to_frame(coord.Galactic, **FRAME)
                 R = compute_stream_rotation_matrix(stream_c, zero_pt=stream_c[0])
                 stream_rot = rotate_sph_coordinate(stream_c, R)
+
+                if stream_rot.lon.wrap_at(180*u.degree).degree[-1] < 0:
+                    logger.debug("flipping stream...")
+                    flip = rotation_matrix(180*u.degree, 'x')
+                    stream_rot = rotate_sph_coordinate(stream_rot, flip)
+                    R = flip*R
 
                 g['R'] = R
 
