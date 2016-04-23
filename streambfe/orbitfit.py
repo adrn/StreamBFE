@@ -14,13 +14,18 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.stats import norm
 import six
 
+import gary.potential as gp
 import gary.coordinates as gc
 from gary.dynamics import orbitfit
 import gary.integrate as gi
 from gary.units import galactic
 
+import biff
+
 # Project
 from .galcen_frame import FRAME
+
+__all__ = ['OrbitfitModel', 'SCFOrbitfitModel', 'PlummerOrbitfitModel']
 
 @six.add_metaclass(abc.ABCMeta)
 class OrbitfitModel(object):
@@ -48,10 +53,10 @@ class OrbitfitModel(object):
     def unpack(self, p):
         count = 0
         count, orbit_pars = self._unpack_orbit(count, p)
-        count, nuisance_pars = self._unpack_nuisance(count, p)
+        count, width_pars = self._unpack_width(count, p)
         count, potential_pars = self._unpack_potential(count, p)
 
-        return orbit_pars, nuisance_pars, potential_pars
+        return orbit_pars, width_pars, potential_pars
 
     def _unpack_orbit(self, count, p):
         # the orbital initial conditions (these will always be in p)
@@ -130,14 +135,14 @@ class OrbitfitModel(object):
     # Helper functions for likelihood
     #
     def _mcmc_sample_to_coord(self, p):
-        orbit_pars,_,_ = self.unpack(p)
-        rep = coord.SphericalRepresentation(lon=0.*u.radian,
-                                            lat=orbit_pars['phi2']*u.radian,
-                                            distance=orbit_pars['distance']*u.kpc)
+        _,orbit_pars = self._unpack_orbit(0, p)
+        rep = coord.SphericalRepresentation(lon=[0.]*u.radian,
+                                            lat=[orbit_pars['phi2']]*u.radian,
+                                            distance=[orbit_pars['d']]*u.kpc)
         return coord.Galactic(orbitfit.rotate_sph_coordinate(rep, self.R.T))
 
     def _mcmc_sample_to_w0(self, p):
-        orbit_pars,_,_ = self.unpack(p)
+        _,orbit_pars = self._unpack_orbit(0, p)
         c = self._mcmc_sample_to_coord(p)
         x0 = c.transform_to(FRAME['galactocentric_frame']).cartesian.xyz.decompose(galactic).value
         v0 = gc.vhel_to_gal(c, pm=(orbit_pars['mul']*u.rad/u.Myr,
@@ -161,8 +166,12 @@ class OrbitfitModel(object):
 
         # integrate the orbit
         potential = self.Potential(units=galactic, **potential_pars)
-        orbit = potential.integrate_orbit(w0, dt=self.dt, nsteps=self.n_steps,
-                                          Integrator=gi.DOPRI853Integrator)
+
+        try:
+            orbit = potential.integrate_orbit(w0, dt=self.dt, nsteps=self.n_steps,
+                                              Integrator=gi.DOPRI853Integrator)
+        except RuntimeError:
+            return -np.inf
 
         # rotate the model points to stream coordinates
         model_c,model_v = orbit.to_frame(coord.Galactic, **FRAME)
@@ -231,3 +240,61 @@ class OrbitfitModel(object):
             return -np.inf
 
         return lp + ll.sum()
+
+    def __call__(self, p):
+        return self.ln_posterior(p)
+
+class SCFOrbitfitModel(OrbitfitModel):
+    """
+    For spherical potentials.
+    """
+
+    def __init__(self, nmax, data, err, R, dt, n_steps, freeze=None):
+        super(SCFOrbitfitModel, self).__init__(data, err, R, biff.SCFPotential, [],
+                                               dt, n_steps, freeze)
+        self.nmax = nmax
+
+    def _ln_potential_prior(self, pars):
+        lp = 0.
+        lp = -(pars['Snlm']**2).sum()
+        return lp
+
+    def _unpack_potential(self, count, p):
+        pars = odict()
+
+        for name in ['m', 'r_s']:
+            _name = "potential_{}".format(name)
+            if _name not in self.freeze:
+                pars[name] = p[count]
+                count += 1
+            else:
+                pars[name] = self.freeze[_name]
+
+        if "potential_Snlm" not in self.freeze:
+            pars['Snlm'] = np.array(p[count:count+self.nmax+1])
+            count += self.nmax+1
+        else:
+            pars['Snlm'] = np.array(self.freeze['potential_Snlm'])
+
+        pars['Snlm'] = pars['Snlm'].reshape((self.nmax+1,1,1))
+        pars['Tnlm'] = np.zeros((self.nmax+1,1,1))
+
+        return count, pars
+
+class PlummerOrbitfitModel(OrbitfitModel):
+    def __init__(self, data, err, R, dt, n_steps, freeze=None):
+        super(PlummerOrbitfitModel, self).__init__(data, err, R, gp.PlummerPotential,
+                                                   ['m', 'b'], dt, n_steps, freeze)
+
+    def _ln_potential_prior(self, pars):
+        lp = 0.
+
+        if 'potential_m' not in self.freeze:
+            if pars['m'] < 5E10 or pars['m'] > 5E12:
+                return -np.inf
+
+        if 'potential_b' not in self.freeze:
+            if pars['b'] < 0.1 or pars['b'] > 100.:
+                return -np.inf
+
+        return lp

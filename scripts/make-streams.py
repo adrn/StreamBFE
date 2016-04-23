@@ -85,16 +85,18 @@ def main(progenitor_mass, n_stars, seed=42):
                 g.attrs['pericenter'] = per
 
                 # randomly draw integration time
-                n_steps = np.random.randint(2000, 4000)
+                n_steps = 96
+                dt = 0.5
+                _n_steps = np.random.randint(1000, 6000)
                 g.attrs['n_steps'] = n_steps
+                g.attrs['dt'] = dt
 
                 # get random initial conditions for given pericenter, apocenter
                 w0 = peri_apo_to_random_w0(per, apo, potential)
                 # g.attrs['w0'] = w0
 
                 # integrate orbit
-                logger.debug("Integrating for {} steps".format(n_steps))
-                prog_orbit = potential.integrate_orbit(w0, dt=1., nsteps=n_steps, t1=float(n_steps))
+                prog_orbit = potential.integrate_orbit(w0, dt=dt, nsteps=_n_steps)
 
                 m = progenitor_mass*u.Msun
                 rtide = (m/potential.mass_enclosed(w0.pos))**(1/3.) * np.sqrt(np.sum(w0.pos**2))
@@ -119,8 +121,7 @@ def main(progenitor_mass, n_stars, seed=42):
                 # stream = stream_orbits[-1]
 
                 # Option 3: just take single orbit, convolve with uncertainties
-                prog_orbit = potential.integrate_orbit(w0, dt=0.2, nsteps=256, t1=float(n_steps))
-                prog_orbit = prog_orbit[::2]
+                prog_orbit = prog_orbit[-n_steps::2]
                 stream = gd.CartesianPhaseSpacePosition(pos=prog_orbit.pos, vel=prog_orbit.vel)
 
                 # save simulated stream data
@@ -144,44 +145,16 @@ def main(progenitor_mass, n_stars, seed=42):
 
                 # convert to sky coordinates and compute the stream rotation matrix
                 stream_c,stream_v = stream.to_frame(coord.Galactic, **FRAME)
-                R1 = compute_stream_rotation_matrix(stream_c, zero_pt="median")
-                stream_rot1 = rotate_sph_coordinate(stream_c, R1)
+                R = compute_stream_rotation_matrix(stream_c, zero_pt=stream_c[0])
+                stream_rot = rotate_sph_coordinate(stream_c, R)
 
-                # pl.figure()
-                # pl.scatter(stream_rot.lon.wrap_at(180*u.degree).degree, stream_rot.lat.degree)
-                # pl.show()
-                # return
+                if stream_rot.lon.wrap_at(180*u.degree).degree[-1] < 0:
+                    logger.debug("flipping stream...")
+                    flip = rotation_matrix(180*u.degree, 'x')
+                    stream_rot = rotate_sph_coordinate(stream_rot, flip)
+                    R = flip*R
 
-                # leading tail should be +lon -- figure out if we need to flip the poles
-                E_plus_lon = stream[stream_rot1.lon.argmax()].energy(potential)
-                E_minus_lon = stream[stream_rot1.lon.wrap_at(180*u.degree).argmin()].energy(potential)
-                E_diff = E_plus_lon - E_minus_lon
-
-                # E_diff should be < 0 if the leading tail is at positive lon
-                if E_diff > 0:
-                    flip_R = rotation_matrix(180*u.degree, 'x')
-                    stream_rot2 = rotate_sph_coordinate(stream_rot1, flip_R)
-                    # lon_sign = 1.
-                else:
-                    flip_R = 1.
-                    stream_rot2 = stream_rot1
-                    # lon_sign = -1.
-
-                logger.debug("Min. lon before align: {:.2e}".format(stream_rot2.lon.wrap_at(180*u.degree).degree.min()))
-
-                lon_R = rotation_matrix(stream_rot2.lon.wrap_at(180*u.degree).min(), 'z')
-                stream_rot3 = rotate_sph_coordinate(stream_rot2, lon_R)
-                stream_rot3.lon.degree.min()
-                logger.debug("Min. lon after align: {:.2e}".format(stream_rot3.lon.wrap_at(180*u.degree).degree.min()))
-
-                R = lon_R * flip_R * R1
-
-                stream_rot = stream_rot3
                 g['R'] = R
-
-                # pl.figure()
-                # pl.scatter(stream_rot.lon.degree, stream_rot.lat.degree)
-                # pl.show()
 
                 # plot the orbit on the sky in galactic and in stream coordinates
                 fig_gal,_ = plot_stream_obs(stream_c, stream_v)
