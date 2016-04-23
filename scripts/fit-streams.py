@@ -143,7 +143,7 @@ def main(potential_name, index, n_walkers=None, n_burn=0, n_iterations=1024,
 
     # now, create initial conditions for MCMC walkers in a small ball around the
     #   optimized parameter vector
-    sampler = emcee.EnsembleSampler(nwalkers=n_walkers, dim=len(p_best),
+    sampler = emcee.EnsembleSampler(nwalkers=n_walkers, dim=len(p_guess),
                                     lnpostfn=model, pool=pool)
 
     logger.info("running mcmc sampler with {} walkers for {} steps".format(n_walkers, n_iterations))
