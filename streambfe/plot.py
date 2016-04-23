@@ -12,8 +12,11 @@ from . import FRAME
 
 __all__ = ["plot_stream_obs", "plot_data", "plot_orbit"]
 
-def plot_stream_obs(stream_c, stream_v):
-    style = dict(ls='none', marker='.', alpha=0.4)
+def plot_stream_obs(stream_c, stream_v, **style_kw):
+    style = dict(linestyle='none', marker='.', alpha=0.4)
+    for k,v in style_kw.items():
+        style[k] = v
+
     fig,axes = pl.subplots(2,3,figsize=(12,8), sharex=True)
 
     if hasattr(stream_c, 'name') and stream_c.name == 'galactic':
@@ -40,7 +43,7 @@ def plot_stream_obs(stream_c, stream_v):
 
     return fig,axes
 
-def plot_data(data, err, R, fig=None, gal=True):
+def plot_data(data, err, R, fig=None, gal=True, **style_kw):
     if fig is None:
         fig,axes = pl.subplots(2,3,figsize=(12,8), sharex=True)
     else:
@@ -60,7 +63,9 @@ def plot_data(data, err, R, fig=None, gal=True):
         lat = coord.Angle(data['phi2'])
         axes[1,1].set_xlabel('$\phi_1$ [deg]')
 
-    style = dict(ls='none', marker='.', ecolor='#aaaaaa')
+    style = dict(linestyle='none', marker='.', ecolor='#aaaaaa')
+    for k,v in style_kw.items():
+        style[k] = v
 
     axes[0,0].errorbar(lon.degree, lat.degree, 1E-8*lat.degree, **style)
     axes[1,0].errorbar(lon.degree, data['distance'].value, err['distance'].value, **style)
@@ -82,14 +87,17 @@ def plot_data(data, err, R, fig=None, gal=True):
 
     return fig,axes
 
-def plot_orbit(orbit, fig=None, gal=True, R=None):
+def plot_orbit(orbit, fig=None, gal=True, R=None, **style_kw):
     orbit_c, orbit_v = orbit.to_frame(coord.Galactic, **FRAME)
 
     if fig is None:
         fig,axes = pl.subplots(2,3,figsize=(12,8), sharex=True)
     else:
         axes = np.array(fig.axes).reshape(2,3)
-    style = dict(ls='-', marker=None, alpha=0.75, color='lightblue')
+
+    style = dict(linestyle='-', marker=None, alpha=0.75, color='lightblue')
+    for k,v in style_kw.items():
+        style[k] = v
 
     if gal:
         lon = orbit_c.l
