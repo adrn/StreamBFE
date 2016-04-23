@@ -1,10 +1,9 @@
-""" ...explain... """
-
 from __future__ import division, print_function
 
 __author__ = "adrn <adrn@astro.columbia.edu>"
 
 # Standard library
+import abc
 from collections import OrderedDict as odict
 
 # Third-party
@@ -13,193 +12,222 @@ import astropy.coordinates as coord
 import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.stats import norm
+import six
 
 import gary.coordinates as gc
 from gary.dynamics import orbitfit
 import gary.integrate as gi
 from gary.units import galactic
-from gary.util import atleast_2d
 
 # Project
 from .galcen_frame import FRAME
 
-def _unpack(p, potential_param_names, freeze=None):
-    """ Unpack a parameter vector """
+@six.add_metaclass(abc.ABCMeta)
+class OrbitfitModel(object):
 
-    if freeze is None:
-        freeze = dict()
+    def __init__(self, data, err, R, Potential, potential_param_names,
+                 dt, n_steps, freeze=None):
 
-    # these are for the initial conditions
-    phi2,d,mul,mub,vr = p[:5]
-    count_ix = 5
+        if freeze is None:
+            freeze = dict()
+        self.freeze = freeze
 
-    # prior on instrinsic width of stream
-    if 'phi2_sigma' not in freeze:
-        phi2_sigma = p[count_ix]
-        count_ix += 1
-    else:
-        phi2_sigma = freeze['phi2_sigma']
+        self.data = data
+        self.err = err
+        self.R = R
 
-    # prior on instrinsic depth (distance) of stream
-    if 'd_sigma' not in freeze:
-        d_sigma = p[count_ix]
-        count_ix += 1
-    else:
-        d_sigma = freeze['d_sigma']
+        self.Potential = Potential
+        self.potential_param_names = potential_param_names
 
-    # prior on instrinsic proper motion dispersion
-    if 'mu_sigma' not in freeze:
-        mu_sigma = p[count_ix]
-        count_ix += 1
-    else:
-        mu_sigma = freeze['mu_sigma']
+        self.dt = dt
+        self.n_steps = n_steps
 
-    # prior on instrinsic LOS velocity dispersion of stream
-    if 'vr_sigma' not in freeze:
-        vr_sigma = p[count_ix]
-        count_ix += 1
-    else:
-        vr_sigma = freeze['vr_sigma']
+    def pack(self, **kwargs):
+        raise NotImplementedError()
 
-    # potential parameters are always the last
-    potential_params = odict()
-    for name in potential_param_names:
-        _name = "potential_{}".format(name)
-        if _name not in freeze:
-            potential_params[name] = p[count_ix]
-            count_ix += 1
-        else:
-            potential_params[name] = freeze[_name]
+    def unpack(self, p):
+        count = 0
+        count, orbit_pars = self._unpack_orbit(count, p)
+        count, nuisance_pars = self._unpack_nuisance(count, p)
+        count, potential_pars = self._unpack_potential(count, p)
 
-    return (phi2,d,mul,mub,vr,phi2_sigma,d_sigma,mu_sigma,vr_sigma,potential_params)
+        return orbit_pars, nuisance_pars, potential_pars
 
-def ln_orbitfit_prior(p, data, err, R, Potential, potential_param_names, ln_potential_prior,
-                      dt, n_steps, freeze=None):
-    """
-    Evaluate the prior over stream orbit fit parameters.
-    See docstring for `ln_likelihood()` for information on args and kwargs.
-    """
+    def _unpack_orbit(self, count, p):
+        # the orbital initial conditions (these will always be in p)
+        names = ['phi2','d','mul','mub','vr']
 
-    # log prior value
-    lp = 0.
+        pars = odict()
+        for i,name in zip(range(count, count+len(names)), names):
+            pars[name] = p[i]
+        return count+5, pars
 
-    # unpack the parameters and the frozen parameters
-    pp = _unpack(p, potential_param_names, freeze)
-    phi2,d,mul,mub,vr,phi2_sigma,d_sigma,mu_sigma,vr_sigma,potential_params = pp
+    def _unpack_width(self, count, p):
+        # the nuisance width parameters
+        names = ['phi2_sigma','d_sigma','mu_sigma','vr_sigma']
 
-    # prior on instrinsic width of stream
-    if 'phi2_sigma' not in freeze:
-        if phi2_sigma <= 0.:
+        pars = odict()
+        for name in names:
+            if name not in self.freeze:
+                pars[name] = p[count]
+                count += 1
+            else:
+                pars[name] = self.freeze[name]
+
+        return count, pars
+
+    def _unpack_potential(self, count, p):
+        pars = odict()
+        for name in self.potential_param_names:
+            _name = "potential_{}".format(name)
+            if _name not in self.freeze:
+                pars[name] = p[count]
+                count += 1
+            else:
+                pars[name] = self.freeze[_name]
+        return count, pars
+
+    # ------------------------------------------------------------------------
+    # Priors
+    #
+    def ln_prior(self, p):
+        orbit_pars, width_pars, potential_pars = self.unpack(p)
+
+        lp = 0.
+        lp += self._ln_orbit_prior(orbit_pars)
+        lp += self._ln_width_prior(width_pars)
+        lp += self._ln_potential_prior(potential_pars)
+
+        return lp
+
+    def _ln_orbit_prior(self, pars):
+        lp = 0.
+
+        # strong prior on phi2
+        if pars['phi2'] < -np.pi/2. or pars['phi2'] > np.pi/2:
             return -np.inf
-        lp += -np.log(phi2_sigma)
+        # lp += norm.logpdf(pars['phi2'], loc=0., scale=phi2_sigma)
 
-    # prior on instrinsic depth (distance) of stream
-    if 'd_sigma' not in freeze:
-        if d_sigma <= 0.:
+        return lp
+
+    def _ln_width_prior(self, pars):
+        lp = 0.
+
+        # prior on instrinsic widths of stream
+        for name in pars.keys():
+            if name not in self.freeze:
+                if pars[name] <= 0.:
+                    return -np.inf
+                lp += -np.log(pars[name])
+
+        return lp
+
+    @abc.abstractmethod
+    def _ln_potential_prior(self, pars):
+        return 0.
+
+    # ------------------------------------------------------------------------
+    # Helper functions for likelihood
+    #
+    def _mcmc_sample_to_coord(self, p):
+        orbit_pars,_,_ = self.unpack(p)
+        rep = coord.SphericalRepresentation(lon=0.*u.radian,
+                                            lat=orbit_pars['phi2']*u.radian,
+                                            distance=orbit_pars['distance']*u.kpc)
+        return coord.Galactic(orbitfit.rotate_sph_coordinate(rep, self.R.T))
+
+    def _mcmc_sample_to_w0(self, p):
+        orbit_pars,_,_ = self.unpack(p)
+        c = self._mcmc_sample_to_coord(p)
+        x0 = c.transform_to(FRAME['galactocentric_frame']).cartesian.xyz.decompose(galactic).value
+        v0 = gc.vhel_to_gal(c, pm=(orbit_pars['mul']*u.rad/u.Myr,
+                                   orbit_pars['mub']*u.rad/u.Myr),
+                            rv=orbit_pars['vr']*u.kpc/u.Myr, **FRAME).decompose(galactic).value
+        w0 = np.concatenate((x0, v0))
+        return w0
+
+    def ln_likelihood(self, p):
+        """ Evaluate the stream orbit fit likelihood. """
+        chi2 = 0.
+
+        # unpack the parameters and the frozen parameters
+        orbit_pars, width_pars, potential_pars = self.unpack(p)
+
+        w0 = self._mcmc_sample_to_w0(p)
+
+        # HACK: a prior on velocities
+        vmag2 = np.sum(w0[3:]**2)
+        chi2 += -vmag2 / (0.15**2)
+
+        # integrate the orbit
+        potential = self.Potential(units=galactic, **potential_pars)
+        orbit = potential.integrate_orbit(w0, dt=self.dt, nsteps=self.n_steps,
+                                          Integrator=gi.DOPRI853Integrator)
+
+        # rotate the model points to stream coordinates
+        model_c,model_v = orbit.to_frame(coord.Galactic, **FRAME)
+        model_oph = orbitfit.rotate_sph_coordinate(model_c.spherical, self.R)
+
+        # model stream points in ophiuchus coordinates
+        model_phi1 = model_oph.lon
+        model_phi2 = model_oph.lat.radian
+        model_d = model_oph.distance.decompose(galactic).value
+        model_mul,model_mub,model_vr = [x.decompose(galactic).value for x in model_v]
+
+        # data, errors
+        data = self.data
+        err = self.err
+        wi = width_pars
+
+        # for independent variable, use cos(phi)
+        data_x = np.cos(data['phi1'])
+        model_x = np.cos(model_phi1)
+        ix = np.argsort(model_x)
+
+        # shortening for readability -- the data
+        phi2 = data['phi2'].radian
+        dist = data['distance'].decompose(galactic).value
+        mul = data['mul'].decompose(galactic).value
+        mub = data['mub'].decompose(galactic).value
+        vr = data['vr'].decompose(galactic).value
+
+        # define interpolating functions
+        order = 3
+        bbox = [-1, 1]
+        phi2_interp = InterpolatedUnivariateSpline(model_x[ix], model_phi2[ix], k=order, bbox=bbox) # change bbox to units of model_x
+        d_interp = InterpolatedUnivariateSpline(model_x[ix], model_d[ix], k=order, bbox=bbox)
+        mul_interp = InterpolatedUnivariateSpline(model_x[ix], model_mul[ix], k=order, bbox=bbox)
+        mub_interp = InterpolatedUnivariateSpline(model_x[ix], model_mub[ix], k=order, bbox=bbox)
+        vr_interp = InterpolatedUnivariateSpline(model_x[ix], model_vr[ix], k=order, bbox=bbox)
+
+        var = wi['phi2_sigma']**2
+        chi2 += -(phi2_interp(data_x) - phi2)**2 / var - np.log(var)
+
+        _err = err['distance'].decompose(galactic).value
+        var = _err**2 + wi['d_sigma']**2
+        chi2 += -(d_interp(data_x) - dist)**2 / var - np.log(var)
+
+        _err = err['mul'].decompose(galactic).value
+        var = _err**2 + wi['mu_sigma']**2
+        chi2 += -(mul_interp(data_x) - mul)**2 / var - np.log(var)
+
+        _err = err['mub'].decompose(galactic).value
+        var = _err**2 + wi['mu_sigma']**2
+        chi2 += -(mub_interp(data_x) - mub)**2 / var - np.log(var)
+
+        _err = err['vr'].decompose(galactic).value
+        var = _err**2 + wi['vr_sigma']**2
+        chi2 += -(vr_interp(data_x) - vr)**2 / var - np.log(var)
+
+        return 0.5*chi2
+
+    def ln_posterior(self, p):
+        lp = self.ln_prior(p)
+        if not np.isfinite(lp):
             return -np.inf
-        lp += -np.log(d_sigma)
 
-    # prior on instrinsic proper motion dispersion
-    if 'mu_sigma' not in freeze:
-        if mu_sigma <= 0.:
+        ll = self.ln_likelihood(p)
+        if not np.all(np.isfinite(ll)):
             return -np.inf
-        lp += -np.log(mu_sigma)
 
-    # prior on instrinsic LOS velocity dispersion of stream
-    if 'vr_sigma' not in freeze:
-        if vr_sigma <= 0.:
-            return -np.inf
-        lp += -np.log(vr_sigma)
-
-    # strong prior on phi2
-    if phi2 < -np.pi/2. or phi2 > np.pi/2:
-        return -np.inf
-    lp += norm.logpdf(phi2, loc=0., scale=phi2_sigma)
-
-    # compute prior on potential params
-    lp += ln_potential_prior(potential_params, freeze)
-
-    return lp
-
-def _mcmc_sample_to_coord(p, R):
-    p = atleast_2d(p, insert_axis=-1) # note: from Gary, not Numpy
-    rep = coord.SphericalRepresentation(lon=p[0]*0.*u.radian,
-                                        lat=p[0]*u.radian, # this index looks weird but is right
-                                        distance=p[1]*u.kpc)
-    return coord.Galactic(orbitfit.rotate_sph_coordinate(rep, R.T))
-
-def _mcmc_sample_to_w0(p, R):
-    p = atleast_2d(p, insert_axis=-1) # note: from Gary, not Numpy
-    c = _mcmc_sample_to_coord(p, R)
-    x0 = c.transform_to(FRAME['galactocentric_frame']).cartesian.xyz.decompose(galactic).value
-    v0 = gc.vhel_to_gal(c, pm=(p[2]*u.rad/u.Myr,p[3]*u.rad/u.Myr), rv=p[4]*u.kpc/u.Myr,
-                        **FRAME).decompose(galactic).value
-    w0 = np.concatenate((x0, v0))
-    return w0
-
-def ln_orbitfit_likelihood(p, data, err, R, Potential, potential_param_names, ln_potential_prior,
-                           dt, n_steps, freeze=None):
-    """ Evaluate the stream orbit fit likelihood. """
-    chi2 = 0.
-
-    # unpack the parameters and the frozen parameters
-    pp = _unpack(p, potential_param_names, freeze)
-    phi2,d,mul,mub,vr,phi2_sigma,d_sigma,mu_sigma,vr_sigma,potential_params = pp
-
-    w0 = _mcmc_sample_to_w0([phi2,d,mul,mub,vr], R)[:,0]
-
-    # HACK: a prior on velocities
-    # vmag2 = np.sum(w0[3:]**2)
-    # chi2 += -vmag2 / (0.15**2)
-
-    # integrate the orbit
-    potential = Potential(units=galactic, **potential_params)
-    orbit = potential.integrate_orbit(w0, dt=dt, nsteps=n_steps,
-                                      Integrator=gi.DOPRI853Integrator)
-
-    # rotate the model points to stream coordinates
-    model_c,model_v = orbit.to_frame(coord.Galactic, **FRAME)
-    model_oph = orbitfit.rotate_sph_coordinate(model_c.spherical, R)
-
-    # model stream points in ophiuchus coordinates
-    model_phi1 = model_oph.lon
-    model_phi2 = model_oph.lat.radian
-    model_d = model_oph.distance.decompose(galactic).value
-    model_mul,model_mub,model_vr = [x.decompose(galactic).value for x in model_v]
-
-    # for independent variable, use cos(phi)
-    data_x = np.cos(data['phi1'])
-    model_x = np.cos(model_phi1)
-    ix = np.argsort(model_x)
-
-    # shortening for readability -- the data
-    phi2 = data['phi2'].radian
-    dist = data['distance'].decompose(galactic).value
-    mul = data['mul'].decompose(galactic).value
-    mub = data['mub'].decompose(galactic).value
-    vr = data['vr'].decompose(galactic).value
-
-    # define interpolating functions
-    order = 3
-    bbox = [-1, 1]
-    phi2_interp = InterpolatedUnivariateSpline(model_x[ix], model_phi2[ix], k=order, bbox=bbox) # change bbox to units of model_x
-    d_interp = InterpolatedUnivariateSpline(model_x[ix], model_d[ix], k=order, bbox=bbox)
-    mul_interp = InterpolatedUnivariateSpline(model_x[ix], model_mul[ix], k=order, bbox=bbox)
-    mub_interp = InterpolatedUnivariateSpline(model_x[ix], model_mub[ix], k=order, bbox=bbox)
-    vr_interp = InterpolatedUnivariateSpline(model_x[ix], model_vr[ix], k=order, bbox=bbox)
-
-    chi2 += -(phi2_interp(data_x) - phi2)**2 / phi2_sigma**2 - 2*np.log(phi2_sigma)
-
-    _err = err['distance'].decompose(galactic).value
-    chi2 += -(d_interp(data_x) - dist)**2 / (_err**2 + d_sigma**2) - np.log(_err**2 + d_sigma**2)
-
-    _err = err['mul'].decompose(galactic).value
-    chi2 += -(mul_interp(data_x) - mul)**2 / (_err**2 + mu_sigma**2) - np.log(_err**2 + mu_sigma**2)
-
-    _err = err['mub'].decompose(galactic).value
-    chi2 += -(mub_interp(data_x) - mub)**2 / (_err**2 + mu_sigma**2) - np.log(_err**2 + mu_sigma**2)
-
-    _err = err['vr'].decompose(galactic).value
-    chi2 += -(vr_interp(data_x) - vr)**2 / (_err**2 + vr_sigma**2) - np.log(_err**2 + vr_sigma**2)
-
-    return 0.5*chi2
+        return lp + ll.sum()

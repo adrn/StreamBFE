@@ -16,15 +16,23 @@ def plot_stream_obs(stream_c, stream_v):
     style = dict(ls='none', marker='.', alpha=0.4)
     fig,axes = pl.subplots(2,3,figsize=(12,8), sharex=True)
 
-    axes[0,0].plot(stream_c.l.degree, stream_c.b.degree, **style)
-    axes[1,0].plot(stream_c.l.degree, stream_c.distance.value, **style)
+    if hasattr(stream_c, 'name') and stream_c.name == 'galactic':
+        lon = stream_c.l
+        lat = stream_c.b
+        axes[1,1].set_xlabel('$l$ [deg]')
 
-    axes[0,1].plot(stream_c.l.degree, galactic.decompose(stream_v[0]).value, **style)
-    axes[1,1].plot(stream_c.l.degree, galactic.decompose(stream_v[1]).value, **style)
+    elif isinstance(stream_c, coord.BaseRepresentation):
+        lon = stream_c.lon
+        lat = stream_c.lat
+        axes[1,1].set_xlabel('$\phi_1$ [deg]')
 
-    axes[0,2].plot(stream_c.l.degree, galactic.decompose(stream_v[2]).value, **style)
+    axes[0,0].plot(lon.degree, lat.degree, **style)
+    axes[1,0].plot(lon.degree, stream_c.distance.value, **style)
 
-    axes[1,1].set_xlabel('$l$ [deg]')
+    axes[0,1].plot(lon.degree, galactic.decompose(stream_v[0]).value, **style)
+    axes[1,1].plot(lon.degree, galactic.decompose(stream_v[1]).value, **style)
+
+    axes[0,2].plot(lon.degree, galactic.decompose(stream_v[2]).value, **style)
 
     fig.tight_layout()
 
@@ -32,30 +40,38 @@ def plot_stream_obs(stream_c, stream_v):
 
     return fig,axes
 
-def plot_data(data, err, R, fig=None):
+def plot_data(data, err, R, fig=None, gal=True):
     if fig is None:
         fig,axes = pl.subplots(2,3,figsize=(12,8), sharex=True)
     else:
         axes = np.array(fig.axes).reshape(2,3)
 
-    rep = coord.SphericalRepresentation(lon=data['phi1'], lat=data['phi2'],
-                                        distance=data['distance'])
-    g = coord.Galactic(orbitfit.rotate_sph_coordinate(rep, R.T))
+    if gal:
+        rep = coord.SphericalRepresentation(lon=data['phi1'], lat=data['phi2'],
+                                            distance=data['distance'])
+        g = coord.Galactic(orbitfit.rotate_sph_coordinate(rep, R.T))
+        lon = g.l
+        lat = g.b
+
+        axes[1,1].set_xlabel('$l$ [deg]')
+
+    else:
+        lon = coord.Angle(data['phi1'])
+        lat = coord.Angle(data['phi2'])
+        axes[1,1].set_xlabel('$\phi_1$ [deg]')
 
     style = dict(ls='none', marker='.', ecolor='#aaaaaa')
 
-    axes[0,0].errorbar(g.l.degree, g.b.degree, 1E-8*g.b.degree, **style)
-    axes[1,0].errorbar(g.l.degree, g.distance.value, err['distance'].value, **style)
+    axes[0,0].errorbar(lon.degree, lat.degree, 1E-8*lat.degree, **style)
+    axes[1,0].errorbar(lon.degree, data['distance'].value, err['distance'].value, **style)
 
-    axes[0,1].errorbar(g.l.degree, galactic.decompose(data['mul']).value,
+    axes[0,1].errorbar(lon.degree, galactic.decompose(data['mul']).value,
                        galactic.decompose(err['mul']).value, **style)
-    axes[1,1].errorbar(g.l.degree, galactic.decompose(data['mub']).value,
+    axes[1,1].errorbar(lon.degree, galactic.decompose(data['mub']).value,
                        galactic.decompose(err['mub']).value, **style)
 
-    axes[0,2].errorbar(g.l.degree, galactic.decompose(data['vr']).value,
+    axes[0,2].errorbar(lon.degree, galactic.decompose(data['vr']).value,
                        galactic.decompose(err['vr']).value, **style)
-
-    axes[1,1].set_xlabel('$l$ [deg]')
 
     try:
         fig.tight_layout()
@@ -66,25 +82,33 @@ def plot_data(data, err, R, fig=None):
 
     return fig,axes
 
-def plot_orbit(orbit, fig=None):
+def plot_orbit(orbit, fig=None, gal=True, R=None):
     orbit_c, orbit_v = orbit.to_frame(coord.Galactic, **FRAME)
 
     if fig is None:
         fig,axes = pl.subplots(2,3,figsize=(12,8), sharex=True)
     else:
         axes = np.array(fig.axes).reshape(2,3)
-
     style = dict(ls='-', marker=None, alpha=0.75, color='lightblue')
 
-    axes[0,0].plot(orbit_c.l.degree, orbit_c.b.degree, **style)
-    axes[1,0].plot(orbit_c.l.degree, orbit_c.distance.value, **style)
+    if gal:
+        lon = orbit_c.l
+        lat = orbit_c.b
+        axes[1,1].set_xlabel('$l$ [deg]')
 
-    axes[0,1].plot(orbit_c.l.degree, galactic.decompose(orbit_v[0]).value, **style)
-    axes[1,1].plot(orbit_c.l.degree, galactic.decompose(orbit_v[1]).value, **style)
+    else:
+        rep = orbitfit.rotate_sph_coordinate(orbit_c, R)
+        lon = rep.lon
+        lat = rep.lat
+        axes[1,1].set_xlabel('$\phi_1$ [deg]')
 
-    axes[0,2].plot(orbit_c.l.degree, galactic.decompose(orbit_v[2]).value, **style)
+    axes[0,0].plot(lon.degree, lat.degree, **style)
+    axes[1,0].plot(lon.degree, orbit_c.distance.value, **style)
 
-    axes[1,1].set_xlabel('$l$ [deg]')
+    axes[0,1].plot(lon.degree, galactic.decompose(orbit_v[0]).value, **style)
+    axes[1,1].plot(lon.degree, galactic.decompose(orbit_v[1]).value, **style)
+
+    axes[0,2].plot(lon.degree, galactic.decompose(orbit_v[2]).value, **style)
 
     try:
         fig.tight_layout()
