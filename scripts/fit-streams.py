@@ -36,7 +36,7 @@ def main(potential_name, index, n_walkers=None, n_burn=0, n_iterations=1024,
     _path,_ = os.path.split(os.path.abspath(__file__))
     top_path = os.path.abspath(os.path.join(_path, ".."))
     simulation_path = os.path.join(top_path, "output", "simulations", true_potential_name)
-    output_path = os.path.join(top_path, "output", "orbitfit", true_potential_name)
+    output_path = os.path.join(top_path, "output", "orbitfit", true_potential_name, potential_name)
     plot_path = os.path.join(output_path, "plots")
     sampler_file = os.path.join(output_path, "emcee.h5")
 
@@ -167,8 +167,8 @@ def main(potential_name, index, n_walkers=None, n_burn=0, n_iterations=1024,
         g['acceptance_fraction'] = sampler.acceptance_fraction
         g['lnprobability'] = sampler.lnprobability
 
-    # if n_iterations > 256:
-    if n_iterations > 0: # HACK
+    if n_iterations > 256:
+        logger.debug("plotting...")
         flatchain = np.vstack(sampler.chain[:,-256::4])
 
         fig,_ = plot_data(data, err, R, gal=False)
