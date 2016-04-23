@@ -25,13 +25,11 @@ from streambfe.data import observe_data
 from streambfe.plot import plot_data, plot_orbit
 from streambfe import orbitfit
 
-def main(potential_name, index, n_walkers=None, n_burn=0, n_iterations=1024,
-         seed=42, mpi=False, overwrite=False, dont_optimize=False):
-    np.random.seed(seed)
-    pool = get_pool(mpi=mpi)
+true_potential_name = 'plummer'
+true_potential = potentials[true_potential_name]
 
-    true_potential_name = 'plummer'
-    true_potential = potentials[true_potential_name]
+def main(potential_name, index, pool, n_walkers=None, n_burn=0, n_iterations=1024,
+         overwrite=False, dont_optimize=False):
 
     _path,_ = os.path.split(os.path.abspath(__file__))
     top_path = os.path.abspath(os.path.join(_path, ".."))
@@ -196,6 +194,66 @@ def main(potential_name, index, n_walkers=None, n_burn=0, n_iterations=1024,
 
     sys.exit(0)
 
+def continue_sampling(potential_name, index, pool, n_iterations):
+    _path,_ = os.path.split(os.path.abspath(__file__))
+    top_path = os.path.abspath(os.path.join(_path, ".."))
+    output_path = os.path.join(top_path, "output", "orbitfit", true_potential_name, potential_name)
+    plot_path = os.path.join(output_path, "plots")
+    sampler_file = os.path.join(output_path, "emcee.h5")
+    model_file = os.path.join(output_path, "model-{}.pickle".format(index))
+
+    try:
+        with open(model_file, 'rb') as f:
+            model = pickle.load(f)
+    except UnicodeDecodeError:
+        with open(model_file, 'rb') as f:
+            model = pickle.load(f, encoding='latin1')
+
+    with h5py.File(sampler_file, 'r') as f:
+        g = f[str(index)]
+        n_walkers,n_prev_steps,n_dim = g['chain'][:].shape
+        mcmc_pos = g['chain'][:,-1,:][:]
+
+    # now, create initial conditions for MCMC walkers in a small ball around the
+    #   optimized parameter vector
+    sampler = emcee.EnsembleSampler(nwalkers=n_walkers, dim=n_dim,
+                                    lnpostfn=model, pool=pool)
+
+    logger.info("continuing mcmc sampler with {} walkers for {} steps".format(n_walkers, n_iterations))
+
+    _ = sampler.run_mcmc(mcmc_pos, N=n_iterations)
+    logger.info("finished sampling")
+
+    pool.close()
+
+    logger.debug("saving sampler data")
+
+    with h5py.File(sampler_file, 'r+') as f:
+        g = f[str(index)]
+        prev_chain = g['chain'][:]
+        prev_acceptance_fraction = g['acceptance_fraction'][:]
+        prev_lnprobability = g['lnprobability'][:]
+        del g['chain']
+        del g['acceptance_fraction']
+        del g['lnprobability']
+
+        g['chain'] = np.hstack((prev_chain, sampler.chain))
+        g['acceptance_fraction'] = np.vstack((prev_acceptance_fraction,
+                                              sampler.acceptance_fraction))
+        g['lnprobability'] = np.vstack((prev_lnprobability, sampler.lnprobability))
+
+    if n_iterations > 256:
+        logger.debug("plotting...")
+        flatchain = np.vstack(sampler.chain[:,-256::4])
+
+        fig,_ = plot_data(model.data, model.err, model.R, gal=False)
+        for i,link in enumerate(flatchain):
+            orbit = true_potential.integrate_orbit(model._mcmc_sample_to_w0(link),
+                                                   dt=model.dt, nsteps=model.n_steps)
+            fig,_ = plot_orbit(orbit, fig=fig, R=model.R, gal=False, alpha=0.25)
+            if i == 32: break
+        fig.savefig(os.path.join(plot_path, "mcmc-{}.png".format(index)))
+
 if __name__ == "__main__":
     from argparse import ArgumentParser
     import logging
@@ -227,6 +285,9 @@ if __name__ == "__main__":
     parser.add_argument("--mcmc-steps", dest="mcmc_steps", type=int,
                         help="Number of steps to take MCMC.")
 
+    parser.add_argument("--continue", action="store_true", dest="_continue",
+                        default=False, help="Continue the mcmc")
+
     args = parser.parse_args()
 
     # Set logger level based on verbose flags
@@ -237,6 +298,14 @@ if __name__ == "__main__":
     else:
         logger.setLevel(logging.INFO)
 
-    main(potential_name=args.potential_name, index=args.index, seed=args.seed,
-         mpi=args.mpi, n_walkers=args.mcmc_walkers, n_iterations=args.mcmc_steps,
+    np.random.seed(args.seed)
+    pool = get_pool(mpi=args.mpi)
+
+    if args._continue:
+        continue_sampling(potential_name=args.potential_name, index=args.index,
+                          pool=pool, n_iterations=args.mcmc_steps)
+        sys.exit(0)
+
+    main(potential_name=args.potential_name, index=args.index,
+         pool=pool, n_walkers=args.mcmc_walkers, n_iterations=args.mcmc_steps,
          overwrite=args.overwrite, dont_optimize=args.dont_optimize)
