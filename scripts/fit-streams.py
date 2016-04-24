@@ -158,7 +158,7 @@ def main(potential_name, index, pool, n_walkers=None, n_burn=0, n_iterations=102
     # mcmc_p0 = emcee.utils.sample_ball(restart_p, 1E-3*restart_p, size=n_walkers)
     # sampler.reset()
 
-    _ = sampler.run_mcmc(mcmc_p0, N=n_iterations)
+    _ = sampler.run_mcmc(pos, N=n_iterations)
     logger.info("finished sampling")
 
     pool.close()
