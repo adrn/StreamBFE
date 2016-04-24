@@ -90,7 +90,10 @@ def main(potential_name, index, pool, frac_distance_err=1,
     stream_c,stream_v = stream.to_frame(coord.Galactic, **FRAME)
     stream_rot = rotate_sph_coordinate(stream_c, R)
 
-    data,err = observe_data(stream_rot, stream_v, frac_distance_err=frac_distance_err)
+    data,err = observe_data(stream_rot, stream_v,
+                            frac_distance_err=frac_distance_err,
+                            vr_err=100*u.km/u.s,
+                            pm_err=1.5*u.mas/u.yr)
     # fig = plot_data(data, err, R, gal=False)
     # pl.show()
 
