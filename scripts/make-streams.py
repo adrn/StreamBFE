@@ -24,9 +24,10 @@ from streambfe.coordinates import compute_stream_rotation_matrix
 from streambfe.plot import plot_orbit, plot_data, plot_stream_obs
 
 # this sets the number of simulations to run
-per_apo = [(15.,25)]*8 + [(25.,60)]*8 + [(85.,125)]*8
+# per_apo = [(15.,25)]*8 + [(25.,60)]*8 + [(85.,125)]*8
+per_apo = [(15.,25), (25,80.), (80, 150.)]
 
-def peri_apo_to_random_w0(pericenter, apocenter, potential):
+def peri_apo_to_random_w0(pericenter, apocenter, potential, frac_r_start=None):
     def _func(E, L, r):
         return 2*(E - potential.value([r,0,0.]).value) - L**2/r**2
 
@@ -34,7 +35,9 @@ def peri_apo_to_random_w0(pericenter, apocenter, potential):
         E,L = p
         return np.array([_func(E,L,apocenter), _func(E,L,pericenter)])
 
-    r_start = np.random.uniform() * (apocenter - pericenter) + pericenter
+    if frac_r_start is None:
+        frac_r_start = np.random.uniform()
+    r_start = frac_r_start * (apocenter - pericenter) + pericenter
     E0 = 0.5*0.2**2 + potential.value([(apocenter+pericenter)/2.,0,0]).value[0]
     L0 = 0.2 * r_start
     E,L = so.broyden1(f, [E0, L0])
@@ -42,6 +45,9 @@ def peri_apo_to_random_w0(pericenter, apocenter, potential):
 
     w0 = gd.CartesianPhaseSpacePosition(pos=[r_start,0.,0]*u.kpc,
                                         vel=[_rdot, L/r_start, 0.]*u.kpc/u.Myr)
+
+    T = 2*np.pi*r_start / (L/r_start)
+    logger.debug("Period: {}".format(T))
 
     # sample a random rotation matrix
     q = gc.Quaternion.random()
@@ -56,7 +62,7 @@ def peri_apo_to_random_w0(pericenter, apocenter, potential):
     logger.debug("Desired (peri,apo): ({:.1f},{:.1f}), estimated (peri,apo): ({:.1f},{:.1f})"
                  .format(pericenter, apocenter, orbit.pericenter(), orbit.apocenter()))
 
-    return w0
+    return w0,T
 
 def main(progenitor_mass, n_stars, seed=42):
     np.random.seed(seed)
@@ -84,19 +90,20 @@ def main(progenitor_mass, n_stars, seed=42):
                 g.attrs['apocenter'] = apo
                 g.attrs['pericenter'] = per
 
-                # randomly draw integration time
-                n_steps = 96
+                # get random initial conditions for given pericenter, apocenter
+                w0,T = peri_apo_to_random_w0(per, apo, potential, frac_r_start=0.1)
+
+                # integration time
                 dt = 0.5
-                _n_steps = np.random.randint(1000, 6000)
+                n_steps = int(T/2*0.9 / dt)
                 g.attrs['n_steps'] = n_steps
                 g.attrs['dt'] = dt
 
-                # get random initial conditions for given pericenter, apocenter
-                w0 = peri_apo_to_random_w0(per, apo, potential)
-                # g.attrs['w0'] = w0
-
                 # integrate orbit
-                prog_orbit = potential.integrate_orbit(w0, dt=dt, nsteps=_n_steps)
+                prog_orbit = potential.integrate_orbit(w0, dt=dt, nsteps=n_steps)
+                sph,_ = prog_orbit.represent_as(coord.SphericalRepresentation)
+                logger.debug("Data distance min,max = {}, {}".format(sph.distance.min(),
+                                                                     sph.distance.max()))
 
                 m = progenitor_mass*u.Msun
                 rtide = (m/potential.mass_enclosed(w0.pos))**(1/3.) * np.sqrt(np.sum(w0.pos**2))
