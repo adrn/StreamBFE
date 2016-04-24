@@ -28,13 +28,16 @@ from streambfe import orbitfit
 true_potential_name = 'plummer'
 true_potential = potentials[true_potential_name]
 
-def main(potential_name, index, pool, n_walkers=None, n_burn=0, n_iterations=1024,
+def main(potential_name, index, pool, frac_distance_err=1,
+         n_walkers=None, n_burn=0, n_iterations=1024,
          overwrite=False, dont_optimize=False):
 
     _path,_ = os.path.split(os.path.abspath(__file__))
     top_path = os.path.abspath(os.path.join(_path, ".."))
     simulation_path = os.path.join(top_path, "output", "simulations", true_potential_name)
-    output_path = os.path.join(top_path, "output", "orbitfit", true_potential_name, potential_name)
+    output_path = os.path.join(top_path, "output", "orbitfit",
+                               true_potential_name, potential_name,
+                               "d_{}percent".format(frac_distance_err))
     plot_path = os.path.join(output_path, "plots")
     sampler_file = os.path.join(output_path, "emcee.h5")
     model_file = os.path.join(output_path, "model-{}.pickle".format(index))
@@ -87,7 +90,7 @@ def main(potential_name, index, pool, n_walkers=None, n_burn=0, n_iterations=102
     stream_c,stream_v = stream.to_frame(coord.Galactic, **FRAME)
     stream_rot = rotate_sph_coordinate(stream_c, R)
 
-    data,err = observe_data(stream_rot, stream_v)
+    data,err = observe_data(stream_rot, stream_v, frac_distance_err=frac_distance_err)
     # fig = plot_data(data, err, R, gal=False)
     # pl.show()
 
@@ -196,10 +199,13 @@ def main(potential_name, index, pool, n_walkers=None, n_burn=0, n_iterations=102
 
     sys.exit(0)
 
-def continue_sampling(potential_name, index, pool, n_iterations):
+def continue_sampling(potential_name, index, pool, n_iterations,
+                      frac_distance_err=1):
     _path,_ = os.path.split(os.path.abspath(__file__))
     top_path = os.path.abspath(os.path.join(_path, ".."))
-    output_path = os.path.join(top_path, "output", "orbitfit", true_potential_name, potential_name)
+    output_path = os.path.join(top_path, "output", "orbitfit",
+                               true_potential_name, potential_name,
+                               "d_{}percent".format(frac_distance_err))
     plot_path = os.path.join(output_path, "plots")
     sampler_file = os.path.join(output_path, "emcee.h5")
     model_file = os.path.join(output_path, "model-{}.pickle".format(index))
@@ -274,6 +280,9 @@ if __name__ == "__main__":
                         type=str, help="Name of the fitting potential can be: "
                                        "plummer, scf")
 
+    parser.add_argument("--frac-d-err", dest="frac_distance_err", default=1,
+                        type=int, help="Fractional distance errors.")
+
     parser.add_argument("--dont-optimize", action="store_true", dest="dont_optimize",
                         default=False, help="Don't optimize, just sample from prior.")
 
@@ -305,9 +314,11 @@ if __name__ == "__main__":
 
     if args._continue:
         continue_sampling(potential_name=args.potential_name, index=args.index,
-                          pool=pool, n_iterations=args.mcmc_steps)
+                          pool=pool, n_iterations=args.mcmc_steps,
+                          frac_distance_err=args.frac_distance_err)
         sys.exit(0)
 
     main(potential_name=args.potential_name, index=args.index, n_burn=args.mcmc_burn,
          pool=pool, n_walkers=args.mcmc_walkers, n_iterations=args.mcmc_steps,
-         overwrite=args.overwrite, dont_optimize=args.dont_optimize)
+         overwrite=args.overwrite, dont_optimize=args.dont_optimize,
+         frac_distance_err=args.frac_distance_err)
