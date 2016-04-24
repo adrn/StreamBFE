@@ -28,7 +28,7 @@ from streambfe import orbitfit
 true_potential_name = 'plummer'
 true_potential = potentials[true_potential_name]
 
-def main(potential_name, index, pool, frac_distance_err=1,
+def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
          n_walkers=None, n_burn=0, n_iterations=1024,
          overwrite=False, dont_optimize=False):
 
@@ -87,7 +87,8 @@ def main(potential_name, index, pool, frac_distance_err=1,
         n_steps = g.attrs['n_steps']
 
     stream = gd.CartesianPhaseSpacePosition(pos=pos, vel=vel)
-    stream_c,stream_v = stream.to_frame(coord.Galactic, **FRAME)
+    idx = np.random.permutation(pos.shape[1])[:n_stars]
+    stream_c,stream_v = stream[idx].to_frame(coord.Galactic, **FRAME)
     stream_rot = rotate_sph_coordinate(stream_c, R)
 
     data,err = observe_data(stream_rot, stream_v,
