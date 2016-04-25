@@ -87,22 +87,20 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
         n_steps = g.attrs['n_steps']
 
     stream = gd.CartesianPhaseSpacePosition(pos=pos, vel=vel)
-    idx = np.random.permutation(pos.shape[1])[:n_stars]
+    idx = np.concatenate(([0], np.random.permutation(pos.shape[1])[:n_stars-1]))
     stream_c,stream_v = stream[idx].to_frame(coord.Galactic, **FRAME)
     stream_rot = rotate_sph_coordinate(stream_c, R)
 
     data,err = observe_data(stream_rot, stream_v,
-                            frac_distance_err=frac_distance_err,
-                            vr_err=100*u.km/u.s,
-                            pm_err=1.5*u.mas/u.yr)
+                            frac_distance_err=frac_distance_err)
     # fig = plot_data(data, err, R, gal=False)
     # pl.show()
 
     # freeze all intrinsic widths (all are smaller than errors)
     freeze['phi2_sigma'] = 1E-7
     freeze['d_sigma'] = 1E-3
-    freeze['vr_sigma'] = 1E-5
-    freeze['mu_sigma'] = 1E-7
+    freeze['vr_sigma'] = 100.
+    freeze['mu_sigma'] = 100.
 
     model = Model(data=data, err=err, R=R, dt=dt, n_steps=int(1.5*n_steps),
                   freeze=freeze, **kw)
