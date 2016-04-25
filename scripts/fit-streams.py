@@ -154,8 +154,8 @@ def main(true_potential_name, fit_potential_name, index, pool,
         #             [freeze['mu_sigma'], freeze['vr_sigma']] + mcmc_potential_std)
 
         # HACK:
-        mcmc_std = ([freeze['phi2_sigma'], freeze['d_sigma'], freeze['mu_sigma']/1E9] +
-                    [freeze['mu_sigma']/1E9, freeze['vr_sigma']] + mcmc_potential_std)
+        mcmc_std = ([freeze['phi2_sigma'], freeze['d_sigma'], 1E-4] +
+                    [1E-4, freeze['vr_sigma']] + mcmc_potential_std)
         mcmc_p0 = emcee.utils.sample_ball(p_guess, mcmc_std, size=n_walkers)
 
     # now, create initial conditions for MCMC walkers in a small ball around the
