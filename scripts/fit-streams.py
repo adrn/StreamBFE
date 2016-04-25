@@ -62,6 +62,7 @@ def main(true_potential_name, fit_potential_name, index, pool,
 
         potential_guess = [6E11]
         mcmc_potential_std = [1E8]
+        potential_truth = [true_potential.parameters['m'].value]
 
     elif fit_potential_name == 'scf':
         Model = orbitfit.SCFOrbitfitModel
@@ -72,6 +73,7 @@ def main(true_potential_name, fit_potential_name, index, pool,
 
         potential_guess = [6E11] + [1.3,0,0,0,0,0,0,0,0] # HACK: try this first
         mcmc_potential_std = [1E8] + [1E-3]*9
+        potential_truth = [true_potential.parameters['m'].value] + true_potential.parameters['Snlm'].ravel().tolist()
 
     elif fit_potential_name == 'triaxialnfw':
         Model = orbitfit.TriaxialNFWOrbitfitModel
@@ -82,7 +84,11 @@ def main(true_potential_name, fit_potential_name, index, pool,
         # freeze['potential_a'] = 1.
 
         potential_guess = [(200*u.km/u.s).decompose(galactic).value, 1., 0.8, 0.6]
-        mcmc_potential_std = [1E-5, 1E-4, 1E-4, 1E-4]
+        mcmc_potential_std = [1E-5, 2E-2, 2E-2, 2E-2]
+        potential_truth = [true_potential.parameters['v_c'].value,
+                           true_potential.parameters['a'].value,
+                           true_potential.parameters['b'].value,
+                           true_potential.parameters['c'].value]
 
     else:
         raise ValueError("Invalid potential name '{}'".format(fit_potential_name))
@@ -114,6 +120,11 @@ def main(true_potential_name, fit_potential_name, index, pool,
 
     model = Model(data=data, err=err, R=R, dt=dt, n_steps=int(1.5*n_steps),
                   freeze=freeze, **kw)
+
+    # save the truth
+    model.true_p = ([stream_rot[0].lat.radian, stream_rot[0].distance.value] +
+                    [v[0].decompose(galactic).value for v in stream_v] +
+                    potential_truth)
 
     # pickle the model
     with open(model_file, 'wb') as f:
