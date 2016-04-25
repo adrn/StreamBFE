@@ -333,12 +333,18 @@ class TriaxialNFWOrbitfitModel(OrbitfitModel):
             if pars['a'] < 0.3 or pars['a'] > 1.:
                 return -np.inf
 
+            # lp += -np.log(pars['a'])
+
         if 'potential_b' not in self.freeze:
             if pars['b'] < 0.3 or pars['b'] > 1.:
                 return -np.inf
 
+            # lp += -np.log(pars['b'])
+
         if 'potential_c' not in self.freeze:
             if pars['c'] < 0.3 or pars['c'] > 1.:
                 return -np.inf
+
+            # lp += -np.log(pars['c'])
 
         return lp
