@@ -173,7 +173,7 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
     else:
         mode = 'r+'
 
-    with h5py.File(sampler_file, mode) as f:
+    with h5py.File(sampler_file, mode) as g:
         del g['chain']
         del g['acceptance_fraction']
         del g['lnprobability']
