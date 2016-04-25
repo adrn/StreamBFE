@@ -25,7 +25,7 @@ from streambfe.plot import plot_orbit, plot_data, plot_stream_obs
 
 # this sets the number of simulations to run
 # per_apo = [(15.,25)]*8 + [(25.,60)]*8 + [(85.,125)]*8
-per_apo = [(15.,25), (25,80.), (80, 150.)]
+per_apo = [(15.,25), (25,80.), (80, 150.), (100., 250.)]
 
 def peri_apo_to_random_w0(pericenter, apocenter, potential, frac_r_start=None):
     def _func(E, L, r):

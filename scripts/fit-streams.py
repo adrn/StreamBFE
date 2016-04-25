@@ -25,19 +25,19 @@ from streambfe.data import observe_data
 from streambfe.plot import plot_data, plot_orbit
 from streambfe import orbitfit
 
-true_potential_name = 'plummer'
-true_potential = potentials[true_potential_name]
-
-def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
+def main(true_potential_name, fit_potential_name, index, pool,
+         frac_distance_err=1, n_stars=32,
          n_walkers=None, n_burn=0, n_iterations=1024,
          overwrite=False, dont_optimize=False):
+
+    true_potential = potentials[true_potential_name]
 
     _path,_ = os.path.split(os.path.abspath(__file__))
     top_path = os.path.abspath(os.path.join(_path, ".."))
     simulation_path = os.path.join(top_path, "output", "simulations", true_potential_name)
     output_path = os.path.join(top_path, "output", "orbitfit",
-                               true_potential_name, potential_name,
-                               "d_{}percent".format(frac_distance_err))
+                               true_potential_name, fit_potential_name,
+                               "d_{:.1f}percent".format(frac_distance_err))
     plot_path = os.path.join(output_path, "plots")
     sampler_file = os.path.join(output_path, "emcee-{}.h5".format(index))
     model_file = os.path.join(output_path, "model-{}.pickle".format(index))
@@ -52,8 +52,8 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
     if not os.path.exists(plot_path):
         os.mkdir(plot_path)
 
-    logger.info("Potential: {}".format(potential_name))
-    if potential_name == 'plummer':
+    logger.info("Potential: {}".format(fit_potential_name))
+    if fit_potential_name == 'plummer':
         Model = orbitfit.PlummerOrbitfitModel
         kw = dict()
 
@@ -63,7 +63,7 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
         potential_guess = [6E11]
         mcmc_potential_std = [1E8]
 
-    elif potential_name == 'scf':
+    elif fit_potential_name == 'scf':
         Model = orbitfit.SCFOrbitfitModel
         kw = dict(nmax=8)
 
@@ -73,8 +73,19 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
         potential_guess = [6E11] + [1.3,0,0,0,0,0,0,0,0] # HACK: try this first
         mcmc_potential_std = [1E8] + [1E-3]*9
 
+    elif fit_potential_name == 'triaxialnfw':
+        Model = orbitfit.TriaxialNFWOrbitfitModel
+        kw = dict()
+
+        freeze = dict()
+        freeze['potential_r_s'] = 20.
+        # freeze['potential_a'] = 1.
+
+        potential_guess = [(200*u.km/u.s).decompose(galactic).value, 1., 0.8, 0.6]
+        mcmc_potential_std = [1E-5, 1E-4, 1E-4, 1E-4]
+
     else:
-        raise ValueError("Invalid potential name '{}'".format(potential_name))
+        raise ValueError("Invalid potential name '{}'".format(fit_potential_name))
 
     with h5py.File(os.path.join(simulation_path, "mock_stream_data.h5"), "r") as f:
         g = f[str(index)]
@@ -97,8 +108,8 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
     # freeze all intrinsic widths (all are smaller than errors)
     freeze['phi2_sigma'] = 1E-7
     freeze['d_sigma'] = 1E-3
-    freeze['vr_sigma'] = 100.
-    freeze['mu_sigma'] = 100.
+    freeze['vr_sigma'] = 5E-4
+    freeze['mu_sigma'] = 1000.
 
     model = Model(data=data, err=err, R=R, dt=dt, n_steps=int(1.5*n_steps),
                   freeze=freeze, **kw)
@@ -143,7 +154,7 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
 
         # HACK:
         mcmc_std = ([freeze['phi2_sigma'], freeze['d_sigma'], freeze['mu_sigma']/1E9] +
-                    [freeze['mu_sigma']/1E9, freeze['vr_sigma']/1E9] + mcmc_potential_std)
+                    [freeze['mu_sigma']/1E9, freeze['vr_sigma']] + mcmc_potential_std)
         mcmc_p0 = emcee.utils.sample_ball(p_guess, mcmc_std, size=n_walkers)
 
     # now, create initial conditions for MCMC walkers in a small ball around the
@@ -191,13 +202,16 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
 
     sys.exit(0)
 
-def continue_sampling(potential_name, index, pool, n_iterations,
+def continue_sampling(true_potential_name, fit_potential_name, index, pool, n_iterations,
                       frac_distance_err=1):
+
+    true_potential = potentials[true_potential_name]
+
     _path,_ = os.path.split(os.path.abspath(__file__))
     top_path = os.path.abspath(os.path.join(_path, ".."))
     output_path = os.path.join(top_path, "output", "orbitfit",
-                               true_potential_name, potential_name,
-                               "d_{}percent".format(frac_distance_err))
+                               true_potential_name, fit_potential_name,
+                               "d_{:.1f}percent".format(frac_distance_err))
     plot_path = os.path.join(output_path, "plots")
     sampler_file = os.path.join(output_path, "emcee-{}.h5".format(index))
     model_file = os.path.join(output_path, "model-{}.pickle".format(index))
@@ -266,12 +280,15 @@ if __name__ == "__main__":
                         type=int, help="Random number seed")
     parser.add_argument("-i", "--index", dest="index", required=True,
                         type=int, help="Index of stream to fit.")
-    parser.add_argument("-p", "--potential", dest="potential_name", required=True,
+    parser.add_argument("-fp", "--fit-potential", dest="fit_potential_name", required=True,
                         type=str, help="Name of the fitting potential can be: "
-                                       "plummer, scf")
+                                       "plummer, scf, triaxialnfw")
+    parser.add_argument("-tp", "--true-potential", dest="true_potential_name", required=True,
+                        type=str, help="Name of the true potential can be: "
+                                       "plummer, scf, triaxialnfw")
 
     parser.add_argument("--frac-d-err", dest="frac_distance_err", default=1,
-                        type=int, help="Fractional distance errors.")
+                        type=float, help="Fractional distance errors.")
 
     parser.add_argument("--dont-optimize", action="store_true", dest="dont_optimize",
                         default=False, help="Don't optimize, just sample from prior.")
@@ -303,12 +320,13 @@ if __name__ == "__main__":
     pool = get_pool(mpi=args.mpi)
 
     if args._continue:
-        continue_sampling(potential_name=args.potential_name, index=args.index,
+        continue_sampling(true_potential_name=args.true_potential_name,
+                          fit_potential_name=args.fit_potential_name, index=args.index,
                           pool=pool, n_iterations=args.mcmc_steps,
                           frac_distance_err=args.frac_distance_err)
         sys.exit(0)
 
-    main(potential_name=args.potential_name, index=args.index, n_burn=args.mcmc_burn,
-         pool=pool, n_walkers=args.mcmc_walkers, n_iterations=args.mcmc_steps,
-         overwrite=args.overwrite, dont_optimize=args.dont_optimize,
-         frac_distance_err=args.frac_distance_err)
+    main(true_potential_name=args.true_potential_name, fit_potential_name=args.fit_potential_name,
+         n_burn=args.mcmc_burn, pool=pool, n_walkers=args.mcmc_walkers,
+         n_iterations=args.mcmc_steps, overwrite=args.overwrite, index=args.index,
+         dont_optimize=args.dont_optimize, frac_distance_err=args.frac_distance_err)
