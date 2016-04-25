@@ -42,7 +42,7 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
     sampler_file = os.path.join(output_path, "emcee-{}.h5".format(index))
     model_file = os.path.join(output_path, "model-{}.pickle".format(index))
 
-    if os.path.exists(sampler_file):
+    if os.path.exists(sampler_file) and not overwrite:
         logger.info("Orbit index {} already complete.".format(index))
         return
 
