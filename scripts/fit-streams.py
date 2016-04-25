@@ -39,14 +39,12 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
                                true_potential_name, potential_name,
                                "d_{}percent".format(frac_distance_err))
     plot_path = os.path.join(output_path, "plots")
-    sampler_file = os.path.join(output_path, "emcee.h5")
+    sampler_file = os.path.join(output_path, "emcee-{}.h5".format(index))
     model_file = os.path.join(output_path, "model-{}.pickle".format(index))
 
     if os.path.exists(sampler_file):
-        with h5py.File(sampler_file, 'r') as f:
-            if str(index) in f and not overwrite:
-                logger.info("Orbit index {} already complete.".format(index))
-                return
+        logger.info("Orbit index {} already complete.".format(index))
+        return
 
     if not os.path.exists(output_path):
         os.makedirs(output_path)
@@ -176,13 +174,9 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
         mode = 'r+'
 
     with h5py.File(sampler_file, mode) as f:
-        if str(index) in f:
-            g = f[str(index)]
-            del g['chain']
-            del g['acceptance_fraction']
-            del g['lnprobability']
-        else:
-            g = f.create_group(str(index))
+        del g['chain']
+        del g['acceptance_fraction']
+        del g['lnprobability']
         g['chain'] = sampler.chain
         g['acceptance_fraction'] = sampler.acceptance_fraction
         g['lnprobability'] = sampler.lnprobability
@@ -209,7 +203,7 @@ def continue_sampling(potential_name, index, pool, n_iterations,
                                true_potential_name, potential_name,
                                "d_{}percent".format(frac_distance_err))
     plot_path = os.path.join(output_path, "plots")
-    sampler_file = os.path.join(output_path, "emcee.h5")
+    sampler_file = os.path.join(output_path, "emcee-{}.h5".format(index))
     model_file = os.path.join(output_path, "model-{}.pickle".format(index))
 
     try:
@@ -219,8 +213,7 @@ def continue_sampling(potential_name, index, pool, n_iterations,
         with open(model_file, 'rb') as f:
             model = pickle.load(f, encoding='latin1')
 
-    with h5py.File(sampler_file, 'r') as f:
-        g = f[str(index)]
+    with h5py.File(sampler_file, 'r') as g:
         n_walkers,n_prev_steps,n_dim = g['chain'][:].shape
         mcmc_pos = g['chain'][:,-1,:][:]
 
@@ -238,8 +231,7 @@ def continue_sampling(potential_name, index, pool, n_iterations,
 
     logger.debug("saving sampler data")
 
-    with h5py.File(sampler_file, 'r+') as f:
-        g = f[str(index)]
+    with h5py.File(sampler_file, 'r+') as g:
         prev_chain = g['chain'][:]
         prev_lnprobability = g['lnprobability'][:]
         del g['chain']
