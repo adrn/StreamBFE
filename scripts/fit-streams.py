@@ -145,7 +145,7 @@ def main(true_potential_name, fit_potential_name, index, pool,
                                                dt=dt, nsteps=n_steps)
         fig,_ = plot_data(data, err, R, gal=False)
         fig,_ = plot_orbit(orbit, fig=fig, R=R, gal=False)
-        fig.savefig(os.path.join(plot_path, "optimized-{}.png".format(index)))
+        fig.savefig(os.path.join(plot_path, "{}-optimized-{}.png".format(name, index)))
 
         mcmc_p0 = emcee.utils.sample_ball(res.x, 1E-3*np.array(p_best), size=n_walkers)
     else:
@@ -201,7 +201,7 @@ def main(true_potential_name, fit_potential_name, index, pool,
                                                    dt=dt, nsteps=n_steps)
             fig,_ = plot_orbit(orbit, fig=fig, R=R, gal=False, alpha=0.25)
             if i == 32: break
-        fig.savefig(os.path.join(plot_path, "mcmc-{}.png".format(index)))
+        fig.savefig(os.path.join(plot_path, "{}-mcmc-{}.png".format(name, index)))
 
     sys.exit(0)
 
@@ -265,7 +265,7 @@ def continue_sampling(true_potential_name, fit_potential_name, index, pool, n_it
                                                    dt=model.dt, nsteps=model.n_steps)
             fig,_ = plot_orbit(orbit, fig=fig, R=model.R, gal=False, alpha=0.25)
             if i == 32: break
-        fig.savefig(os.path.join(plot_path, "mcmc-{}.png".format(index)))
+        fig.savefig(os.path.join(plot_path, "{}-mcmc-{}.png".format(name, index)))
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
