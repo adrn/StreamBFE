@@ -138,8 +138,12 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
         mcmc_p0 = emcee.utils.sample_ball(res.x, 1E-3*np.array(p_best), size=n_walkers)
     else:
 
-        mcmc_std = ([freeze['phi2_sigma'], freeze['d_sigma'], freeze['mu_sigma']] +
-                    [freeze['mu_sigma'], freeze['vr_sigma']] + mcmc_potential_std)
+        # mcmc_std = ([freeze['phi2_sigma'], freeze['d_sigma'], freeze['mu_sigma']] +
+        #             [freeze['mu_sigma'], freeze['vr_sigma']] + mcmc_potential_std)
+
+        # HACK:
+        mcmc_std = ([freeze['phi2_sigma'], freeze['d_sigma'], freeze['mu_sigma']/1E9] +
+                    [freeze['mu_sigma']/1E9, freeze['vr_sigma']/1E9] + mcmc_potential_std)
         mcmc_p0 = emcee.utils.sample_ball(p_guess, mcmc_std, size=n_walkers)
 
     # now, create initial conditions for MCMC walkers in a small ball around the
