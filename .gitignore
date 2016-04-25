@@ -3,3 +3,7 @@ dist
 *.egg-info
 *.pickle
 *.o*
+
+article/*.fdb_latexmk
+article/*.fls
+article/*.pdf
