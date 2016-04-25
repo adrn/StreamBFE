@@ -168,15 +168,7 @@ def main(potential_name, index, pool, frac_distance_err=1, n_stars=32,
 
     logger.debug("saving sampler data")
 
-    if not os.path.exists(sampler_file):
-        mode = 'w'
-    else:
-        mode = 'r+'
-
-    with h5py.File(sampler_file, mode) as g:
-        del g['chain']
-        del g['acceptance_fraction']
-        del g['lnprobability']
+    with h5py.File(sampler_file, 'w') as g:
         g['chain'] = sampler.chain
         g['acceptance_fraction'] = sampler.acceptance_fraction
         g['lnprobability'] = sampler.lnprobability
