@@ -28,7 +28,7 @@ from streambfe import orbitfit
 def main(true_potential_name, fit_potential_name, index, pool,
          frac_distance_err=1, n_stars=32,
          n_walkers=None, n_burn=0, n_iterations=1024,
-         overwrite=False, dont_optimize=False):
+         overwrite=False, dont_optimize=False, name=None):
 
     true_potential = potentials[true_potential_name]
 
@@ -39,8 +39,8 @@ def main(true_potential_name, fit_potential_name, index, pool,
                                true_potential_name, fit_potential_name,
                                "d_{:.1f}percent".format(frac_distance_err))
     plot_path = os.path.join(output_path, "plots")
-    sampler_file = os.path.join(output_path, "emcee-{}.h5".format(index))
-    model_file = os.path.join(output_path, "model-{}.pickle".format(index))
+    sampler_file = os.path.join(output_path, "{}-emcee-{}.h5".format(name, index))
+    model_file = os.path.join(output_path, "{}-model-{}.pickle".format(name, index))
 
     if os.path.exists(sampler_file) and not overwrite:
         logger.info("Orbit index {} already complete.".format(index))
@@ -206,7 +206,7 @@ def main(true_potential_name, fit_potential_name, index, pool,
     sys.exit(0)
 
 def continue_sampling(true_potential_name, fit_potential_name, index, pool, n_iterations,
-                      frac_distance_err=1):
+                      frac_distance_err=1, name=None):
 
     true_potential = potentials[true_potential_name]
 
@@ -216,8 +216,8 @@ def continue_sampling(true_potential_name, fit_potential_name, index, pool, n_it
                                true_potential_name, fit_potential_name,
                                "d_{:.1f}percent".format(frac_distance_err))
     plot_path = os.path.join(output_path, "plots")
-    sampler_file = os.path.join(output_path, "emcee-{}.h5".format(index))
-    model_file = os.path.join(output_path, "model-{}.pickle".format(index))
+    sampler_file = os.path.join(output_path, "{}-emcee-{}.h5".format(name, index))
+    model_file = os.path.join(output_path, "{}-model-{}.pickle".format(name, index))
 
     try:
         with open(model_file, 'rb') as f:
@@ -289,6 +289,8 @@ if __name__ == "__main__":
     parser.add_argument("-tp", "--true-potential", dest="true_potential_name", required=True,
                         type=str, help="Name of the true potential can be: "
                                        "plummer, scf, triaxialnfw")
+    parser.add_argument("--name", dest="name", required=True,
+                        type=str, help="Name of the run.")
 
     parser.add_argument("--frac-d-err", dest="frac_distance_err", default=1,
                         type=float, help="Fractional distance errors.")
@@ -328,10 +330,11 @@ if __name__ == "__main__":
         continue_sampling(true_potential_name=args.true_potential_name,
                           fit_potential_name=args.fit_potential_name, index=args.index,
                           pool=pool, n_iterations=args.mcmc_steps,
-                          frac_distance_err=args.frac_distance_err)
+                          frac_distance_err=args.frac_distance_err, name=args.name)
         sys.exit(0)
 
     main(true_potential_name=args.true_potential_name, fit_potential_name=args.fit_potential_name,
          n_stars=args.n_stars, n_burn=args.mcmc_burn, pool=pool, n_walkers=args.mcmc_walkers,
          n_iterations=args.mcmc_steps, overwrite=args.overwrite, index=args.index,
-         dont_optimize=args.dont_optimize, frac_distance_err=args.frac_distance_err)
+         dont_optimize=args.dont_optimize, frac_distance_err=args.frac_distance_err,
+         name=args.name)
