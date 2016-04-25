@@ -81,12 +81,11 @@ def main(true_potential_name, fit_potential_name, index, pool,
 
         freeze = dict()
         freeze['potential_r_s'] = 20.
-        # freeze['potential_a'] = 1.
+        freeze['potential_a'] = 1.
 
-        potential_guess = [(200*u.km/u.s).decompose(galactic).value, 1., 0.8, 0.6]
-        mcmc_potential_std = [1E-5, 2E-2, 2E-2, 2E-2]
+        potential_guess = [(200*u.km/u.s).decompose(galactic).value, 0.8, 0.6]
+        mcmc_potential_std = [1E-5, 1E-3, 1E-3]
         potential_truth = [true_potential.parameters['v_c'].value,
-                           true_potential.parameters['a'].value,
                            true_potential.parameters['b'].value,
                            true_potential.parameters['c'].value]
 
