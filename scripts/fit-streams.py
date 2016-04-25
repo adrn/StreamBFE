@@ -101,7 +101,8 @@ def main(true_potential_name, fit_potential_name, index, pool,
     stream_rot = rotate_sph_coordinate(stream_c, R)
 
     data,err = observe_data(stream_rot, stream_v,
-                            frac_distance_err=frac_distance_err)
+                            frac_distance_err=frac_distance_err,
+                            vr_err=10*u.km/u.s)
     # fig = plot_data(data, err, R, gal=False)
     # pl.show()
 
@@ -187,6 +188,8 @@ def main(true_potential_name, fit_potential_name, index, pool,
         g['chain'] = sampler.chain
         g['acceptance_fraction'] = sampler.acceptance_fraction
         g['lnprobability'] = sampler.lnprobability
+        g.attrs['n_stars'] = n_stars
+        g.attrs['frac_distance_err'] = frac_distance_err
 
     if n_iterations > 256:
         logger.debug("plotting...")
@@ -289,6 +292,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--frac-d-err", dest="frac_distance_err", default=1,
                         type=float, help="Fractional distance errors.")
+    parser.add_argument("-n", "--n-stars", dest="n_stars", default=32,
+                        type=int, help="Number of 'stars'.")
 
     parser.add_argument("--dont-optimize", action="store_true", dest="dont_optimize",
                         default=False, help="Don't optimize, just sample from prior.")
@@ -327,6 +332,6 @@ if __name__ == "__main__":
         sys.exit(0)
 
     main(true_potential_name=args.true_potential_name, fit_potential_name=args.fit_potential_name,
-         n_burn=args.mcmc_burn, pool=pool, n_walkers=args.mcmc_walkers,
+         n_stars=args.n_stars, n_burn=args.mcmc_burn, pool=pool, n_walkers=args.mcmc_walkers,
          n_iterations=args.mcmc_steps, overwrite=args.overwrite, index=args.index,
          dont_optimize=args.dont_optimize, frac_distance_err=args.frac_distance_err)
