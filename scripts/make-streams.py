@@ -94,10 +94,12 @@ def main(progenitor_mass, n_stars, seed=42):
                 w0,T = peri_apo_to_random_w0(per, apo, potential, frac_r_start=0.1)
 
                 # integration time
-                dt = 0.5
-                n_steps = int(T/2*0.9 / dt)
+                t1 = T/2*0.9
+                n_steps = 10000
+                dt = t1/n_steps
                 g.attrs['n_steps'] = n_steps
                 g.attrs['dt'] = dt
+                logger.debug("dt: {:.2f}, N steps: {}".format(dt, n_steps))
 
                 # integrate orbit
                 prog_orbit = potential.integrate_orbit(w0, dt=dt, nsteps=n_steps)
