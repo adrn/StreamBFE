@@ -28,7 +28,8 @@ from .galcen_frame import FRAME
 
 _G = G.decompose(galactic).value
 
-__all__ = ['OrbitfitModel', 'SCFOrbitfitModel', 'PlummerOrbitfitModel']
+__all__ = ['OrbitfitModel', 'SCFOrbitfitModel', 'PlummerOrbitfitModel',
+           'TriaxialNFWOrbitfitModel']
 
 @six.add_metaclass(abc.ABCMeta)
 class OrbitfitModel(object):
@@ -311,6 +312,33 @@ class PlummerOrbitfitModel(OrbitfitModel):
 
         if 'potential_b' not in self.freeze:
             if pars['b'] < 0.1 or pars['b'] > 100.:
+                return -np.inf
+
+        return lp
+
+class TriaxialNFWOrbitfitModel(OrbitfitModel):
+    def __init__(self, data, err, R, dt, n_steps, freeze=None):
+        pnames = ['v_c', 'r_s', 'a', 'b', 'c']
+        super(TriaxialNFWOrbitfitModel, self).__init__(data, err, R, gp.LeeSutoTriaxialNFWPotential,
+                                                       pnames, dt, n_steps, freeze)
+
+    def _ln_potential_prior(self, pars):
+        lp = 0.
+
+        if 'potential_v_c' not in self.freeze:
+            if pars['v_c'] < 0.1 or pars['v_c'] > 0.3:
+                return -np.inf
+
+        if 'potential_a' not in self.freeze:
+            if pars['a'] < 0.3 or pars['a'] > 1.:
+                return -np.inf
+
+        if 'potential_b' not in self.freeze:
+            if pars['b'] < 0.3 or pars['b'] > 1.:
+                return -np.inf
+
+        if 'potential_c' not in self.freeze:
+            if pars['c'] < 0.3 or pars['c'] > 1.:
                 return -np.inf
 
         return lp
