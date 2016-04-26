@@ -102,19 +102,22 @@ def main(true_potential_name, fit_potential_name, index, pool,
 
     stream = gd.CartesianPhaseSpacePosition(pos=pos, vel=vel)
     idx = np.concatenate(([0], np.random.permutation(pos.shape[1])[:n_stars-1]))
-    stream_c,stream_v = stream[idx].to_frame(coord.Galactic, **FRAME)
-    stream_rot = rotate_sph_coordinate(stream_c, R)
+    true_stream_c,true_stream_v = stream[idx].to_frame(coord.Galactic, **FRAME)
+    true_stream_rot = rotate_sph_coordinate(true_stream_c, R)
 
     # intrinsic widths - all are smaller than errors except sky pos, distance
     rtide = 0.5*u.kpc
-    phi2_sigma = (rtide / stream_rot.distance.mean()).decompose().value
+    phi2_sigma = (rtide / true_stream_rot.distance.mean()).decompose().value
     d_sigma = rtide.to(u.kpc).value
 
-    stream_rot = coord.SphericalRepresentation(lon=stream_rot.lon,
-                                               lat=np.random.normal(stream_rot.lat.radian,
+    stream_rot = coord.SphericalRepresentation(lon=true_stream_rot.lon,
+                                               lat=np.random.normal(true_stream_rot.lat.radian,
                                                                     phi2_sigma)*u.radian,
-                                               distance=np.random.normal(stream_rot.distance.
+                                               distance=np.random.normal(true_stream_rot.distance.
                                                                          value, d_sigma)*u.kpc)
+
+    # set all proper motions to zero because they shouldn't matter
+    stream_v = [true_stream_v[0]*0., true_stream_v[1]*0., true_stream_v[2]]
 
     data,err = observe_data(stream_rot, stream_v,
                             frac_distance_err=frac_distance_err,
@@ -139,8 +142,8 @@ def main(true_potential_name, fit_potential_name, index, pool,
         pickle.dump(model, f)
 
     # starting position for optimization
-    p_guess = ([stream_rot[0].lat.radian, stream_rot[0].distance.value] +
-               [v[0].decompose(galactic).value for v in stream_v] +
+    p_guess = ([true_stream_rot[0].lat.radian, true_stream_rot[0].distance.value] +
+               [v[0].decompose(galactic).value for v in true_stream_v] +
                potential_guess)
 
     logger.debug("ln_posterior at initialization: {}".format(model(p_guess)))
