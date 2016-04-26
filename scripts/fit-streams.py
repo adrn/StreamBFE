@@ -105,15 +105,24 @@ def main(true_potential_name, fit_potential_name, index, pool,
     stream_c,stream_v = stream[idx].to_frame(coord.Galactic, **FRAME)
     stream_rot = rotate_sph_coordinate(stream_c, R)
 
+    # intrinsic widths - all are smaller than errors except sky pos, distance
+    rtide = 0.5*u.kpc
+    phi2_sigma = (rtide / stream_rot.distance.mean()).decompose().value
+    d_sigma = rtide.to(u.kpc).value
+
+    stream_rot = coord.SphericalRepresentation(lon=stream_rot.lon,
+                                               lat=np.random.normal(stream_rot.lat.radian,
+                                                                    phi2_sigma)*u.radian,
+                                               distance=np.random.normal(stream_rot.distance.
+                                                                         value, d_sigma)*u.kpc)
+
     data,err = observe_data(stream_rot, stream_v,
                             frac_distance_err=frac_distance_err,
                             vr_err=10*u.km/u.s)
-    # fig = plot_data(data, err, R, gal=False)
-    # pl.show()
 
-    # freeze all intrinsic widths (all are smaller than errors)
-    freeze['phi2_sigma'] = 1E-7
-    freeze['d_sigma'] = 1E-3
+    # freeze all intrinsic widths
+    freeze['phi2_sigma'] = phi2_sigma
+    freeze['d_sigma'] = d_sigma
     freeze['vr_sigma'] = 5E-4
     freeze['mu_sigma'] = 1000.
 
